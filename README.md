@@ -1,7 +1,7 @@
 A mobile music playlist app built with Python and Kivy.
 
 About
-A simple music playlist manager designed for a 360x640 mobile screen. It lets you browse playlists by artist and view their song lists. Currently includes playlists for Against The Current, Ghost, Judas Priest, and a mixed Random playlist.
+A simple music playlist manager designed for a 360x640 mobile screen. It lets you browse playlists by artist and view their song lists. Currently includes playlists for Against The Current, Ghost, Judas Priest, and a mixed Random playlist. Only the UI has been added for now.
 
 Features
 
