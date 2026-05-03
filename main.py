@@ -8,8 +8,320 @@ from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
+import pygame
+import sys
 
 Window.size = (360, 640)
+
+pygame.mixer.init()
+
+SONGS = {
+
+    # songs from random playlist
+    " It's My Life\n -Bon Jovi":
+        "songs/its_my_life.mp3",
+    " They Don't Care About Us\n -Michael Jackson":
+        "songs/they_dont_care_about_us.mp3",
+    " Can't Help Falling in Love \n -Elvis Presley":
+        "songs/cant_help_falling_in_love.mp3",
+    " All of Me \n -John Legend":
+        "songs/all_of_me.mp3",
+    " Hymn For the Weekend \n -Coldplay":
+        "songs/hymn_for_the_weekend.mp3",
+    " Way Down we go \n -Kaleo":
+        "songs/way_down_we_go.mp3",
+    " House of Memories \n -Panic! At the Disco":
+        "songs/house_of_memories.mp3",
+    " Another Love \n -Tom Odell":
+        "songs/another_love.mp3",
+    " Superbeast \n -Rob Zombie":
+        "songs/superbeast.mp3",
+    " Ordinary \n -Alex Warren":
+        "songs/ordinary.mp3",
+    " Bella Ciao \n -Manu Pilas":
+        "songs/bella_ciao.mp3",
+    " Oh What a Circus \n -Antonio Banderas":
+        "songs/oh_what_a_circus.mp3",
+    " Numb Little Bug \n -Em Beihold":
+        "songs/numb_little_bug.mp3",
+
+    #songs from judas priest
+    "Breaking the Law\n -Judas Priest":
+        "songs/breaking_the_law.mp3",
+    "You've Got Another Thing Coming\n -Judas Priest":
+        "songs/youve_got_another_thing_coming.mp3",
+    "Living After Midnight\n -Judas Priest":
+        "songs/living_after_midnight.mp3",
+    "Painkiller\n -Judas Priest":
+        "songs/painkiller.mp3",
+    "Electric Eye\n -Judas Priest":
+        "songs/electric_eye.mp3",
+    "The Hellion\n -Judas Priest":
+        "songs/the_hellion.mp3",
+    "Hell Bent for Leather\n -Judas Priest":
+        "songs/hell_bent_for_leather.mp3",
+    "Screaming for Vengeance\n -Judas Priest":
+        "songs/screaming_for_vengeance.mp3",
+    "Turbo Lover\n -Judas Priest":
+        "songs/turbo_lover.mp3",
+    "Beyond the Realms of Death\n -Judas Priest":
+        "songs/beyond_the_realms_of_death.mp3",
+    "Victim of Changes\n -Judas Priest":
+        "songs/victim_of_changes.mp3",
+    "Freewheel Burning\n -Judas Priest":
+        "songs/freewheel_burning.mp3",
+    "The Sentinel\n -Judas Priest":
+        "songs/the_sentinel.mp3",
+    "Metal Gods\n -Judas Priest":
+        "songs/metal_gods.mp3",
+    "Heading Out to the Highway\n -Judas Priest":
+        "songs/heading_out_to_the_highway.mp3",
+    "Night Crawler\n -Judas Priest":
+        "songs/night_crawler.mp3",
+    "A Touch of Evil\n -Judas Priest":
+        "songs/a_touch_of_evil.mp3",
+    "Sinner\n -Judas Priest":
+        "songs/sinner.mp3",
+    "Exciter\n -Judas Priest":
+        "songs/exciter.mp3",
+    "Desert Plains\n -Judas Priest":
+        "songs/desert_plains.mp3",
+    "Dissident Aggressor\n -Judas Priest":
+        "songs/dissident_aggressor.mp3",
+    "Tyrant\n -Judas Priest":
+        "songs/tyrant.mp3",
+    "Running Wild\n -Judas Priest":
+        "songs/running_wild.mp3",
+    "Blood Red Skies\n -Judas Priest":
+        "songs/blood_red_skies.mp3",
+    "Before the Dawn\n -Judas Priest":
+        "songs/before_the_dawn.mp3",
+    "Dreamer Deceiver\n -Judas Priest":
+        "songs/dreamer_deceiver.mp3",
+    "Rock Hard Ride Free\n -Judas Priest":
+        "songs/rock_hard_ride_free.mp3",
+    "Between the Hammer and the Anvil\n -Judas Priest":
+        "songs/between_the_hammer_and_the_anvil.mp3",
+    "Hell Patrol\n -Judas Priest":
+        "songs/hell_patrol.mp3",
+    "Judas Rising\n -Judas Priest":
+        "songs/judas_rising.mp3",
+    "Firepower\n -Judas Priest":
+        "songs/firepower.mp3",
+    "Never the Heroes\n -Judas Priest":
+        "songs/never_the_heroes.mp3",
+    "Halls of Valhalla\n -Judas Priest":
+        "songs/halls_of_valhalla.mp3",
+    "Traitors Gate\n -Judas Priest":
+        "songs/traitors_gate.mp3",
+    "Steeler\n -Judas Priest":
+        "songs/steeler.mp3",
+
+    # AGAINST THE CURRENT
+    "I Like the Way\n -Against The Current":
+        "songs/i_like_the_way.mp3",
+    "Runaway\n -Against The Current":
+        "songs/runaway.mp3",
+    "Strangers Again\n -Against The Current":
+        "songs/strangers_again.mp3",
+    "Demons\n -Against The Current":
+        "songs/demons.mp3",
+    "Chasing Ghosts\n -Against The Current":
+        "songs/chasing_ghosts.mp3",
+    "Closer, Faster\n -Against The Current":
+        "songs/closer_faster.mp3",
+    "Outsiders\n -Against The Current":
+        "songs/outsiders.mp3",
+    "Blood Like Gasoline\n -Against The Current":
+        "songs/blood_like_gasoline.mp3",
+    "Roses\n -Against The Current":
+        "songs/roses.mp3",
+    "One More Weekend\n -Against The Current":
+        "songs/one_more_weekend.mp3",
+    "Sweet Surrender\n -Against The Current":
+        "songs/sweet_surrender.mp3",
+    "Come Alive\n -Against The Current":
+        "songs/come_alive.mp3",
+    "weapon - acoustic\n -Against The Current":
+        "songs/weapon_acoustic.mp3",
+    "weapon\n -Against The Current":
+        "songs/weapon.mp3",
+    "that won't save us\n -Against The Current":
+        "songs/that_wont_save_us.mp3",
+    "Voices\n -Against The Current":
+        "songs/voices.mp3",
+    "Legends Never Die\n -League of Legends, Against The Current":
+        "songs/legends_never_die.mp3",
+    "Almost Forgot - Ryan Riback Remix\n -Against The Current, Ryan Riback":
+        "songs/almost_forgot_ryan_riback_remix.mp3",
+    "Brighter\n -Against The Current":
+        "songs/brighter.mp3",
+    "Running with the Wild Things\n -Against The Current":
+        "songs/running_with_the_wild_things.mp3",
+    "Gravity - Acoustic\n -Against The Current":
+        "songs/gravity_acoustic.mp3",
+    "Forget Me Now\n -Against The Current":
+        "songs/forget_me_now.mp3",
+    "good guy\n -Against The Current":
+        "songs/good_guy.mp3",
+    "blindfolded\n -Against The Current":
+        "songs/blindfolded.mp3",
+    "silent stranger\n -Against The Current":
+        "songs/silent_stranger.mp3",
+    "Something You Need\n -Against The Current":
+        "songs/something_you_need.mp3",
+    "Another You (Another Way)\n -Against The Current":
+        "songs/another_you_another_way.mp3",
+    "The Fuss\n -Against The Current":
+        "songs/the_fuss.mp3",
+    "In Our Bones\n -Against The Current":
+        "songs/in_our_bones.mp3",
+    "again&again\n -Against The Current, guardin":
+        "songs/again_and_again.mp3",
+    "burn it down\n -Against The Current":
+        "songs/burn_it_down.mp3",
+    "lullaby\n -Against The Current":
+        "songs/lullaby.mp3",
+    "shatter\n -Against The Current":
+        "songs/shatter.mp3",
+    "jump\n -Against The Current":
+        "songs/jump.mp3",
+    "Wildfire\n -Against The Current":
+        "songs/wildfire.mp3",
+    "Talk\n -Against The Current":
+        "songs/talk.mp3",
+    "Paralyzed - Acoustic\n -Against The Current":
+        "songs/paralyzed_acoustic.mp3",
+    "Wasteland\n -Against The Current":
+        "songs/wasteland.mp3",
+    "See You Again\n -ATC":
+        "songs/see_you_again.mp3",
+    "One More Night\n -Alex Goot, ATC, Julia Sheer, Luke Conard, Chad Sugg":
+        "songs/one_more_night.mp3",
+    "P.A.T.T.\n -Against The Current":
+        "songs/patt.mp3",
+    "Personal\n -Against The Current":
+        "songs/personal.mp3",
+    "Scream\n -Against The Current":
+        "songs/scream.mp3",
+    "Young & Relentless\n -Against The Current":
+        "songs/young_and_relentless.mp3",
+    "Fireproof\n -Against The Current":
+        "songs/fireproof.mp3",
+    "Friendly Reminder\n -Against The Current":
+        "songs/friendly_reminder.mp3",
+    "Infinity\n -Against The Current":
+        "songs/infinity.mp3",
+    "Another You (Another Way)\n -Against The Current":
+        "songs/another_you_another_way.mp3",
+    "Dreaming Alone\n -Against The Current, Taka":
+        "songs/dreaming_alone.mp3",
+    "Dreaming Alone\n -Against The Current, Taka":
+        "songs/dreaming_alone.mp3",
+    "Guessing\n -ATC":
+        "songs/guessing.mp3",
+    "Heavenly\n -Against The Current":
+        "songs/heavenly.mp3",
+
+    #songs from ghost
+    "Year Zero\n -Ghost":
+        "songs/year_zero.mp3",
+    "Mary On A Cross\n -Ghost":
+        "songs/mary_on_a_cross.mp3",
+    "Square Hammer\n -Ghost":
+        "songs/square_hammer.mp3",
+    "Dance Macabre\n -Ghost":
+        "songs/dance_macabre.mp3",
+    "Call Me Little Sunshine\n -Ghost":
+        "songs/call_me_little_sunshine.mp3",
+    "Spillways\n -Ghost":
+        "songs/spillways.mp3",
+    "Cirice\n -Ghost":
+        "songs/cirice.mp3",
+    "The Future Is A Foreign Land\n -Ghost":
+        "songs/the_future_is_a_foreign_land.mp3",
+    "Life Eternal\n -Ghost":
+        "songs/life_eternal.mp3",
+    "Kiss The Go-Goat\n -Ghost":
+        "songs/kiss_the_go_goat.mp3",
+    "Darkness At The Heart Of My Love\n -Ghost":
+        "songs/darkness_at_the_heart_of_my_love.mp3",
+    "Kaisarion\n -Ghost":
+        "songs/kaisarion.mp3",
+    "Hunter's Moon\n -Ghost":
+        "songs/hunters_moon.mp3",
+    "Jesus He Knows Me\n -Ghost":
+        "songs/jesus_he_knows_me.mp3",
+    "Griftwood\n -Ghost":
+        "songs/griftwood.mp3",
+    "Watcher In The Sky\n -Ghost":
+        "songs/watcher_in_the_sky.mp3",
+    "Respite On The Spitalfields\n -Ghost":
+        "songs/respite_on_the_spitalfields.mp3",
+    "Twenties\n -Ghost":
+        "songs/twenties.mp3",
+    "Monstrance Clock\n -Ghost":
+        "songs/monstrance_clock.mp3",
+    "He Is\n -Ghost":
+        "songs/he_is.mp3",
+    "See The Light\n -Ghost":
+        "songs/see_the_light.mp3",
+    "Enter Sandman\n -Ghost":
+        "songs/enter_sandman.mp3",
+    "Phantom Of The Opera\n -Ghost":
+        "songs/phantom_of_the_opera.mp3",
+    "Imperium\n -Ghost":
+        "songs/imperium.mp3",
+    "Miasma\n -Ghost":
+        "songs/miasma.mp3",
+    "Pro Memoria\n -Ghost":
+        "songs/pro_memoria.mp3",
+    "Infestissumam\n -Ghost":
+        "songs/infestissumam.mp3",
+    "Ashes\n -Ghost":
+        "songs/ashes.mp3",
+    "Helvetesfonster\n -Ghost":
+        "songs/helvetesfonster.mp3",
+    "He Is\n -Ghost, Alison Mosshart":
+        "songs/he_is.mp3",
+    "Witch Image\n -Ghost":
+        "songs/witch_image.mp3",
+    "Ritual\n -Ghost":
+        "songs/ritual.mp3",
+    "Jigolo Har Megiddo\n -Ghost":
+        "songs/jigolo_har_megiddo.mp3",
+    "Stay [Feat. Patrick Wilson]\n -Ghost, Patrick Wilson":
+        "songs/stay.mp3",
+    "Faith\n -Ghost":
+        "songs/faith.mp3",
+    "Lachryma\n -Ghost":
+        "songs/lachryma.mp3",
+    "Missionary Man\n -Ghost":
+        "songs/missionary_man.mp3",
+}
+
+def play_music(song_name):
+
+    """
+    Plays mp3 using pygame mixer.
+    """
+
+    if song_name in SONGS:
+
+        try:
+
+            pygame.mixer.music.load(SONGS[song_name])
+            pygame.mixer.music.play()
+
+            print(f"Now Playing: {song_name}")
+
+        except Exception as e:
+
+            print("ERROR:", e)
+
+    else:
+
+        print(f"No song file mapped for:\n{song_name}")
 
 
 # screen manager
@@ -220,7 +532,7 @@ class RandomScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        print(f"Playing: {instance.text}")
+        play_music(instance.text)
 
 
 # atc playlist screen
@@ -292,7 +604,7 @@ class AtcScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        print(f"Playing: {instance.text}")
+        play_music(instance.text)
 
 
 #ghost screen
@@ -339,8 +651,8 @@ class GhostScreen(Screen):
             "Stay [Feat. Patrick Wilson]\n -Ghost, Patrick Wilson",
             "Faith\n -Ghost",
             "Lachryma\n -Ghost",
-            "Missionary Man\n -Ghost"    
-            ]
+            "Missionary Man\n -Ghost"
+        ]
 
         for song in songs:
             btn = make_playlist_button(song, self.play_song)
@@ -349,7 +661,7 @@ class GhostScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        print(f"Playing: {instance.text}")
+        play_music(instance.text)
 
 
 #judas priest screen
@@ -404,7 +716,7 @@ class JPScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        print(f"Playing: {instance.text}")
+        play_music(instance.text)
 
 
 # default screen
@@ -429,9 +741,9 @@ class MyApp(App):
         sm = ScreenManager()
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(PlaylistScreen(name="playlist"))
-        sm.add_widget(AtcScreen(name="against"))#
+        sm.add_widget(AtcScreen(name="against"))
         sm.add_widget(GhostScreen(name="ghost"))
-        sm.add_widget(JPScreen(name="jp"))  # FIXED HERE
+        sm.add_widget(JPScreen(name="jp"))
         sm.add_widget(RandomScreen(name="random"))
 
         return sm
