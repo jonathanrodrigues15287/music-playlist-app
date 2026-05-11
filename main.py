@@ -1,5 +1,6 @@
 from kivy.app import App
 from kivy.uix.button import Button
+from kivy.uix.label import Label
 from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 from kivy.core.window import Window
@@ -8,12 +9,12 @@ from kivy.graphics import Color, Line
 from kivy.clock import Clock
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
-import pygame
-import sys
+from kivy.core.audio import SoundLoader
 
 Window.size = (360, 640)
 
-pygame.mixer.init()
+current_sound = None
+current_song_name = ""
 
 SONGS = {
 
@@ -45,7 +46,7 @@ SONGS = {
     " Numb Little Bug \n -Em Beihold":
         "songs/numb_little_bug.mp3",
 
-    #songs from judas priest
+    # songs from judas priest
     "Breaking the Law\n -Judas Priest":
         "songs/breaking_the_law.mp3",
     "You've Got Another Thing Coming\n -Judas Priest":
@@ -212,10 +213,6 @@ SONGS = {
         "songs/friendly_reminder.mp3",
     "Infinity\n -Against The Current":
         "songs/infinity.mp3",
-    "Another You (Another Way)\n -Against The Current":
-        "songs/another_you_another_way.mp3",
-    "Dreaming Alone\n -Against The Current, Taka":
-        "songs/dreaming_alone.mp3",
     "Dreaming Alone\n -Against The Current, Taka":
         "songs/dreaming_alone.mp3",
     "Guessing\n -ATC":
@@ -223,7 +220,7 @@ SONGS = {
     "Heavenly\n -Against The Current":
         "songs/heavenly.mp3",
 
-    #songs from ghost
+    # songs from ghost
     "Year Zero\n -Ghost":
         "songs/year_zero.mp3",
     "Mary On A Cross\n -Ghost":
@@ -264,6 +261,8 @@ SONGS = {
         "songs/monstrance_clock.mp3",
     "He Is\n -Ghost":
         "songs/he_is.mp3",
+    "He Is (feat. Alison Mosshart)\n -Ghost":
+        "songs/he_is_feat_alison_mosshart.mp3",
     "See The Light\n -Ghost":
         "songs/see_the_light.mp3",
     "Enter Sandman\n -Ghost":
@@ -282,8 +281,6 @@ SONGS = {
         "songs/ashes.mp3",
     "Helvetesfonster\n -Ghost":
         "songs/helvetesfonster.mp3",
-    "He Is\n -Ghost, Alison Mosshart":
-        "songs/he_is.mp3",
     "Witch Image\n -Ghost":
         "songs/witch_image.mp3",
     "Ritual\n -Ghost":
@@ -300,37 +297,230 @@ SONGS = {
         "songs/missionary_man.mp3",
 }
 
-def play_music(song_name):
+class AndroidMediaSession:
 
-    """
-    Plays mp3 using pygame mixer.
-    """
+    def __init__(self):
+        self.session = None
+        self._PlaybackStateCompat = None
+        self._MediaMetadataCompat = None
+        self._setup()
 
-    if song_name in SONGS:
-
+    def _setup(self):
         try:
+            from jnius import autoclass
 
-            pygame.mixer.music.load(SONGS[song_name])
-            pygame.mixer.music.play()
+            PythonActivity      = autoclass('org.kivy.android.PythonActivity')
+            MediaSessionCompat  = autoclass('androidx.media.session.MediaSessionCompat')
+            PlaybackStateCompat = autoclass('androidx.media.session.PlaybackStateCompat')
+            MediaMetadataCompat = autoclass('androidx.media.MediaMetadataCompat')
 
-            print(f"Now Playing: {song_name}")
+            self._PlaybackStateCompat = PlaybackStateCompat
+            self._MediaMetadataCompat = MediaMetadataCompat
+
+            activity = PythonActivity.mActivity
+            context  = activity.getApplicationContext()
+
+            self.session = MediaSessionCompat(context, "KivyMusicPlayer")
+
+            actions = (
+                PlaybackStateCompat.ACTION_PLAY |
+                PlaybackStateCompat.ACTION_PAUSE |
+                PlaybackStateCompat.ACTION_STOP |
+                PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+            )
+
+            state = (PlaybackStateCompat.Builder()
+                     .setActions(actions)
+                     .setState(PlaybackStateCompat.STATE_STOPPED, 0, 1.0)
+                     .build())
+
+            self.session.setPlaybackState(state)
+            self.session.setActive(True)
+
+            print("MediaSession initialised successfully")
 
         except Exception as e:
+            print(f"MediaSession not available (non-Android): {e}")
+            self.session = None
 
-            print("ERROR:", e)
+    def update_metadata(self, title, artist):
+        if not self.session:
+            return
+        try:
+            metadata = (self._MediaMetadataCompat.Builder()
+                        .putString(self._MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                        .putString(self._MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                        .build())
+            self.session.setMetadata(metadata)
+        except Exception as e:
+            print(f"MediaSession metadata error: {e}")
 
+    def set_playing(self, is_playing):
+        """Switch the notification bar between play / pause icon."""
+        if not self.session:
+            return
+        try:
+            state_val = (self._PlaybackStateCompat.STATE_PLAYING
+                         if is_playing
+                         else self._PlaybackStateCompat.STATE_PAUSED)
+            state = (self._PlaybackStateCompat.Builder()
+                     .setState(state_val, 0, 1.0)
+                     .build())
+            self.session.setPlaybackState(state)
+        except Exception as e:
+            print(f"MediaSession state error: {e}")
+
+    def release(self):
+        if self.session:
+            self.session.setActive(False)
+            self.session.release()
+
+media_session = AndroidMediaSession()
+
+def play_music(song_name):
+    global current_sound, current_song_name
+    song_name = song_name.strip()
+
+    if song_name not in SONGS:
+        spaced = " " + song_name
+        if spaced in SONGS:
+            song_name = spaced
+        else:
+            print(f"No song file mapped for: {song_name}")
+            return
+
+    # Stop whatever is already playing
+    if current_sound:
+        current_sound.stop()
+        current_sound = None
+
+    current_sound = SoundLoader.load(SONGS[song_name])
+    current_song_name = song_name
+
+    if current_sound:
+        current_sound.play()
+
+        parts  = song_name.split("\n")
+        title  = parts[0].strip()
+        artist = parts[1].strip().lstrip("-").strip() if len(parts) > 1 else "Unknown"
+
+        # Push to lock screen / notification bar
+        media_session.update_metadata(title, artist)
+        media_session.set_playing(True)
+
+        print(f"Now playing: {title} — {artist}")
     else:
+        print(f"Failed to load: {song_name}")
 
-        print(f"No song file mapped for:\n{song_name}")
 
-
-# screen manager
 def switch_screen(screen, screen_name):
     if screen.manager:
         screen.manager.current = screen_name
 
 
-# home screen
+def make_header(text):
+    lbl = Label(
+        text=text,
+        size_hint=(None, None),
+        size=(dp(360), dp(50)),
+        pos=(dp(0), dp(590)),
+        color=(1, 1, 1, 1),
+        halign="left",
+        valign="middle",
+        padding_x=dp(15),
+    )
+    lbl.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
+
+    with lbl.canvas.after:
+        Color(0, 0, 1, 1)
+        lbl.border_line = Line(width=2)
+
+    def update_line(inst, val):
+        x, y = inst.pos
+        w, _ = inst.size
+        inst.border_line.points = [x, y, x + w, y]
+
+    lbl.bind(pos=update_line, size=update_line)
+    Clock.schedule_once(lambda dt: update_line(lbl, None), 0)
+
+    return lbl
+
+
+def make_nav_bar(screen, layout):
+    btn_home = Button(
+        background_normal="home_logo.png",
+        size_hint=(None, None),
+        size=(dp(50), dp(50)),
+        pos=(dp(0), dp(0))
+    )
+    btn_home.bind(on_press=lambda inst: switch_screen(screen, 'home'))
+
+    btn_playlist = Button(
+        background_normal="playlist_logo.png",
+        size_hint=(None, None),
+        size=(dp(50), dp(50)),
+        pos=(dp(55), dp(0))
+    )
+    btn_playlist.bind(on_press=lambda inst: switch_screen(screen, 'playlist'))
+
+    layout.add_widget(btn_home)
+    layout.add_widget(btn_playlist)
+
+
+def make_scrollable_content(header_text, screen):
+    layout = FloatLayout()
+    layout.add_widget(make_header(header_text))
+
+    scroll = ScrollView(
+        size_hint=(None, None),
+        size=(dp(360), dp(540)),
+        pos=(dp(0), dp(50)),
+    )
+
+    inner = BoxLayout(
+        orientation='vertical',
+        size_hint_y=None,
+    )
+    inner.bind(minimum_height=inner.setter('height'))
+
+    scroll.add_widget(inner)
+    layout.add_widget(scroll)
+    make_nav_bar(screen, layout)
+
+    return layout, inner
+
+
+def make_playlist_button(text, callback):
+    btn = Button(
+        text=text,
+        size_hint=(1, None),
+        height=dp(50),
+        background_normal="",
+        background_color=(0, 0, 0, 1),
+        color=(0.68, 0.85, 0.90, 1),
+        halign="left",
+        valign="middle",
+        padding_x=dp(15),
+    )
+    btn.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
+    btn.bind(on_press=callback)
+
+    with btn.canvas.after:
+        Color(0.6, 0.6, 0.6, 1)
+        btn.divider = Line(width=1)
+
+    def update_divider(inst, val):
+        x, y = inst.pos
+        w, _ = inst.size
+        inst.divider.points = [x, y, x + w, y]
+
+    btn.bind(pos=update_divider, size=update_divider)
+    Clock.schedule_once(lambda dt: update_divider(btn, None), 0)
+
+    return btn
+
+#screens
 class HomeScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -366,119 +556,6 @@ class HomeScreen(Screen):
         self.add_widget(layout)
 
 
-# header properties
-def make_header(text):
-    btn = Button(
-        text=text,
-        size_hint=(None, None),
-        size=(dp(360), dp(50)),
-        pos=(dp(0), dp(590)),
-        background_normal="",
-        background_color=(0, 0, 0, 1),
-        color=(1, 1, 1, 1),
-        halign="left",
-        valign="middle",
-        padding_x=dp(15),
-    )
-
-    btn.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
-
-    with btn.canvas.after:
-        Color(0, 0, 1, 1)
-        btn.border_line = Line(width=2)
-
-    def update_line(inst, val):
-        x, y = inst.pos
-        w, _ = inst.size
-        inst.border_line.points = [x, y, x + w, y]
-
-    btn.bind(pos=update_line, size=update_line)
-    Clock.schedule_once(lambda dt: update_line(btn, None), 0)
-
-    return btn
-
-
-# navigation bar properties
-def make_nav_bar(screen, layout):
-    btn_home = Button(
-        background_normal="home_logo.png",
-        size_hint=(None, None),
-        size=(dp(50), dp(50)),
-        pos=(dp(0), dp(0))
-    )
-    btn_home.bind(on_press=lambda inst: switch_screen(screen, 'home'))
-
-    btn_playlist = Button(
-        background_normal="playlist_logo.png",
-        size_hint=(None, None),
-        size=(dp(50), dp(50)),
-        pos=(dp(55), dp(0))
-    )
-    btn_playlist.bind(on_press=lambda inst: switch_screen(screen, 'playlist'))
-
-    layout.add_widget(btn_home)
-    layout.add_widget(btn_playlist)
-
-
-# scrollable properties
-def make_scrollable_content(header_text, screen):
-    layout = FloatLayout()
-
-    layout.add_widget(make_header(header_text))
-
-    scroll = ScrollView(
-        size_hint=(None, None),
-        size=(dp(360), dp(540)),
-        pos=(dp(0), dp(50)),
-    )
-
-    inner = BoxLayout(
-        orientation='vertical',
-        size_hint_y=None,
-    )
-    inner.bind(minimum_height=inner.setter('height'))
-
-    scroll.add_widget(inner)
-    layout.add_widget(scroll)
-
-    make_nav_bar(screen, layout)
-
-    return layout, inner
-
-
-# button properties
-def make_playlist_button(text, callback):
-    btn = Button(
-        text=text,
-        size_hint=(1, None),
-        height=dp(50),
-        background_normal="",
-        background_color=(0, 0, 0, 1),
-        color=(0.68, 0.85, 0.90, 1),
-        halign="left",
-        valign="middle",
-        padding_x=dp(15),
-    )
-
-    btn.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
-    btn.bind(on_press=callback)
-
-    with btn.canvas.after:
-        Color(0.6, 0.6, 0.6, 1)
-        btn.divider = Line(width=1)
-
-    def update_divider(inst, val):
-        x, y = inst.pos
-        w, _ = inst.size
-        inst.divider.points = [x, y, x + w, y]
-
-    btn.bind(pos=update_divider, size=update_divider)
-    Clock.schedule_once(lambda dt: update_divider(btn, None), 0)
-
-    return btn
-
-
-# playlist main screen
 class PlaylistScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -502,7 +579,6 @@ class PlaylistScreen(Screen):
         self.add_widget(layout)
 
 
-# random playlist screen
 class RandomScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -522,7 +598,7 @@ class RandomScreen(Screen):
             " Ordinary \n -Alex Warren",
             " Bella Ciao \n -Manu Pilas",
             " Oh What a Circus \n -Antonio Banderas",
-            " Numb Little Bug \n -Em Beihold"
+            " Numb Little Bug \n -Em Beihold",
         ]
 
         for song in songs:
@@ -535,7 +611,6 @@ class RandomScreen(Screen):
         play_music(instance.text)
 
 
-# atc playlist screen
 class AtcScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -590,8 +665,6 @@ class AtcScreen(Screen):
             "Fireproof\n -Against The Current",
             "Friendly Reminder\n -Against The Current",
             "Infinity\n -Against The Current",
-            "Another You (Another Way)\n -Against The Current",
-            "Dreaming Alone\n -Against The Current, Taka",
             "Dreaming Alone\n -Against The Current, Taka",
             "Guessing\n -ATC",
             "Heavenly\n -Against The Current",
@@ -607,7 +680,6 @@ class AtcScreen(Screen):
         play_music(instance.text)
 
 
-#ghost screen
 class GhostScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -644,14 +716,15 @@ class GhostScreen(Screen):
             "Infestissumam\n -Ghost",
             "Ashes\n -Ghost",
             "Helvetesfonster\n -Ghost",
-            "He Is\n -Ghost, Alison Mosshart",
+            # FIX: updated to match the corrected unique key in SONGS dict
+            "He Is (feat. Alison Mosshart)\n -Ghost",
             "Witch Image\n -Ghost",
             "Ritual\n -Ghost",
             "Jigolo Har Megiddo\n -Ghost",
             "Stay [Feat. Patrick Wilson]\n -Ghost, Patrick Wilson",
             "Faith\n -Ghost",
             "Lachryma\n -Ghost",
-            "Missionary Man\n -Ghost"
+            "Missionary Man\n -Ghost",
         ]
 
         for song in songs:
@@ -664,7 +737,6 @@ class GhostScreen(Screen):
         play_music(instance.text)
 
 
-#judas priest screen
 class JPScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -718,24 +790,6 @@ class JPScreen(Screen):
     def play_song(self, instance):
         play_music(instance.text)
 
-
-# default screen
-class SimpleScreen(Screen):
-    def __init__(self, title, **kwargs):
-        super().__init__(**kwargs)
-
-        layout, inner = make_scrollable_content(title, self)
-
-        btn = make_playlist_button(" Placeholder", self.placeholder_action)
-        inner.add_widget(btn)
-
-        self.add_widget(layout)
-
-    def placeholder_action(self, instance):
-        print("Placeholder clicked")
-
-
-# main app
 class MyApp(App):
     def build(self):
         sm = ScreenManager()
@@ -745,8 +799,16 @@ class MyApp(App):
         sm.add_widget(GhostScreen(name="ghost"))
         sm.add_widget(JPScreen(name="jp"))
         sm.add_widget(RandomScreen(name="random"))
-
         return sm
+
+    def on_pause(self):
+        return True
+
+    def on_stop(self):
+        global current_sound
+        if current_sound:
+            current_sound.stop()
+        media_session.release()
 
 
 MyApp().run()
