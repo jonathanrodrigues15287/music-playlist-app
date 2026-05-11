@@ -716,7 +716,6 @@ class GhostScreen(Screen):
             "Infestissumam\n -Ghost",
             "Ashes\n -Ghost",
             "Helvetesfonster\n -Ghost",
-            # FIX: updated to match the corrected unique key in SONGS dict
             "He Is (feat. Alison Mosshart)\n -Ghost",
             "Witch Image\n -Ghost",
             "Ritual\n -Ghost",
