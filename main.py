@@ -10,6 +10,7 @@ from kivy.clock import Clock
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.core.audio import SoundLoader
+from kivy.uix.slider import Slider
 
 Window.size = (360, 640)
 
@@ -464,8 +465,18 @@ def make_nav_bar(screen, layout):
     )
     btn_playlist.bind(on_press=lambda inst: switch_screen(screen, 'playlist'))
 
+    btn_settings = Button(
+        background_normal ="settings_logo.png",
+        size_hint=(None,None),
+        size=(dp(50),dp(50)),
+        pos=(dp(110),dp(0))
+    )
+    btn_settings.bind(on_press=lambda inst: switch_screen(screen, 'settings'))
+
+
     layout.add_widget(btn_home)
     layout.add_widget(btn_playlist)
+    layout.add_widget(btn_settings)
 
 
 def make_scrollable_content(header_text, screen):
@@ -549,12 +560,43 @@ class HomeScreen(Screen):
         )
         btn2.bind(on_press=lambda inst: switch_screen(self, "playlist"))
 
+        btn3 = Button(
+            background_normal="settings_logo.png",
+            size_hint=(None, None),
+            size=(dp(50),dp(50)),
+            pos=(dp(110),dp(0))
+        )
+        btn3.bind(on_press=lambda inst: switch_screen(self, "settings"))
+
         layout.add_widget(btn0)
         layout.add_widget(btn1)
         layout.add_widget(btn2)
+        layout.add_widget(btn3)
 
         self.add_widget(layout)
 
+class SettingsScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        layout, inner = make_scrollable_content("  Settings", self)
+
+        self.volume_label = Label(text="Volume: 100%")
+
+        slider = Slider(min=0, max=1, value=1.0)
+        slider.bind(value=self.change_volume)
+
+        inner.add_widget(self.volume_label)
+        inner.add_widget(slider)
+
+        self.add_widget(layout)
+
+    def change_volume(self, instance, value):
+        global current_sound
+        if current_sound:
+            current_sound.volume = value
+        percent = int(value * 100)
+        self.volume_label.text = f"Volume: {percent}%"
 
 class PlaylistScreen(Screen):
     def __init__(self, **kwargs):
@@ -798,6 +840,7 @@ class MyApp(App):
         sm.add_widget(GhostScreen(name="ghost"))
         sm.add_widget(JPScreen(name="jp"))
         sm.add_widget(RandomScreen(name="random"))
+        sm.add_widget(SettingsScreen(name="settings"))
         return sm
 
     def on_pause(self):
