@@ -5,7 +5,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.metrics import dp
 from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.graphics import Color, Line
+from kivy.graphics import Color, Line, Rectangle
 from kivy.clock import Clock
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
@@ -14,8 +14,13 @@ from kivy.uix.slider import Slider
 
 Window.size = (360, 640)
 
-current_sound = None
+current_sound     = None
 current_song_name = ""
+is_paused         = False
+current_volume    = 1.0
+paused_pos        = 0.0   
+
+song_bar = None
 
 SONGS = {
 
@@ -298,8 +303,8 @@ SONGS = {
         "songs/missionary_man.mp3",
 }
 
-class AndroidMediaSession:
 
+class AndroidMediaSession:
     def __init__(self):
         self.session = None
         self._PlaybackStateCompat = None
@@ -358,7 +363,6 @@ class AndroidMediaSession:
             print(f"MediaSession metadata error: {e}")
 
     def set_playing(self, is_playing):
-        """Switch the notification bar between play / pause icon."""
         if not self.session:
             return
         try:
@@ -379,8 +383,142 @@ class AndroidMediaSession:
 
 media_session = AndroidMediaSession()
 
+class SongBar(FloatLayout):
+
+    BAR_H  = dp(50)  
+    PROG_H = dp(3)   
+    BTN_W  = dp(50)   
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.size_hint = (None, None)
+        self.size      = (dp(360), self.BAR_H)
+        self.pos       = (0, dp(50))   
+        
+        with self.canvas.before:
+            Color(0.1, 0.1, 0.1, 1)
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+
+        self.bind(pos=self._update_bg, size=self._update_bg)
+
+        with self.canvas:
+            Color(0.25, 0.25, 0.25, 1)
+            self._track = Rectangle(pos=self.pos, size=(dp(360), self.PROG_H))
+
+        with self.canvas:
+            Color(0, 0.5, 1, 1)
+            self._fill = Rectangle(pos=self.pos, size=(0, self.PROG_H))
+
+        self.title_label = Label(
+            text="No song playing",
+            size_hint=(None, None),
+            size=(dp(360) - self.BTN_W, self.BAR_H - self.PROG_H),
+            pos=(dp(5), dp(50) + self.PROG_H),
+            color=(1, 1, 1, 1),
+            halign="left",
+            valign="middle",
+            font_size=dp(12),
+            shorten=True,
+            shorten_from="right",
+        )
+        self.title_label.bind(
+            size=lambda inst, val: setattr(inst, 'text_size', inst.size)
+        )
+        self.add_widget(self.title_label)
+
+        self.play_btn = Button(
+            text="",
+            size_hint=(None, None),
+            size=(self.BTN_W, self.BAR_H - self.PROG_H),
+            pos=(dp(360) - self.BTN_W, dp(50) + self.PROG_H),
+            background_normal="pause_logo.png",   
+            background_down="pause_logo.png",
+            border=(0, 0, 0, 0),
+        )
+        self.play_btn.bind(on_press=self._toggle_pause)
+        self.add_widget(self.play_btn)
+
+        self.bind(pos=self._reposition_children)
+        Clock.schedule_once(lambda dt: self._reposition_children(self, None), 0)
+
+        Clock.schedule_interval(self._tick, 1)
+
+    def _update_bg(self, *args):
+        self._bg.pos  = self.pos
+        self._bg.size = self.size
+
+    def _reposition_children(self, inst, val):
+        x, y = self.pos
+        self.title_label.pos = (x + dp(5), y + self.PROG_H)
+        self.play_btn.pos    = (x + dp(360) - self.BTN_W, y + self.PROG_H)
+        self._track.pos  = (x, y + self.BAR_H - self.PROG_H)
+        self._track.size = (self.size[0], self.PROG_H)
+        self._fill.pos   = (x, y + self.BAR_H - self.PROG_H)
+
+    def _tick(self, dt):
+        self._refresh_progress()
+
+    def _refresh_progress(self):
+        global current_sound, is_paused
+
+        if is_paused:
+            position = paused_pos
+        elif current_sound:
+            position = current_sound.get_pos()
+        else:
+            position = 0.0
+
+        duration = current_sound.length if current_sound else 0
+        if duration and duration > 0:
+            ratio = max(0.0, min(1.0, position / duration))
+        else:
+            ratio = 0.0
+
+        x, y = self.pos
+        bar_y = y + self.BAR_H - self.PROG_H
+        self._track.pos  = (x, bar_y)
+        self._track.size = (self.size[0], self.PROG_H)
+        self._fill.pos   = (x, bar_y)
+        self._fill.size  = (self.size[0] * ratio, self.PROG_H)
+
+    def _toggle_pause(self, instance):
+        global current_sound, is_paused, paused_pos
+
+        if current_sound is None:
+            return
+
+        if is_paused:
+            pos_to_seek = paused_pos
+            current_sound.play()
+            Clock.schedule_once(lambda dt: current_sound.seek(pos_to_seek), 0.3)
+            is_paused = False
+            self.play_btn.background_normal = "pause_logo.png"
+            self.play_btn.background_down   = "pause_logo.png"
+            media_session.set_playing(True)
+        else:
+            paused_pos = current_sound.get_pos()
+            current_sound.stop()
+            is_paused = True
+            self.play_btn.background_normal = "play_logo.png"
+            self.play_btn.background_down   = "play_logo.png"
+            media_session.set_playing(False)
+
+    def on_new_song(self, song_name):
+        global is_paused, paused_pos
+        is_paused  = False
+        paused_pos = 0.0
+        self.play_btn.background_normal = "pause_logo.png"
+        self.play_btn.background_down   = "pause_logo.png"
+
+        title = song_name.split("\n")[0].strip()
+        self.title_label.text = title
+
+        self._refresh_progress()
+
 def play_music(song_name):
-    global current_sound, current_song_name
+    global current_sound, current_song_name, is_paused, current_volume, paused_pos
+
     song_name = song_name.strip()
 
     if song_name not in SONGS:
@@ -391,28 +529,35 @@ def play_music(song_name):
             print(f"No song file mapped for: {song_name}")
             return
 
-    # Stop whatever is already playing
     if current_sound:
         current_sound.stop()
         current_sound = None
 
-    current_sound = SoundLoader.load(SONGS[song_name])
-    current_song_name = song_name
+    is_paused  = False
+    paused_pos = 0.0
 
-    if current_sound:
-        current_sound.play()
+    song_path     = SONGS[song_name]
+    current_sound = SoundLoader.load(song_path)
 
-        parts  = song_name.split("\n")
-        title  = parts[0].strip()
-        artist = parts[1].strip().lstrip("-").strip() if len(parts) > 1 else "Unknown"
+    if current_sound is None:
+        print(f"Could not load file: {song_path}")
+        return
 
-        # Push to lock screen / notification bar
-        media_session.update_metadata(title, artist)
-        media_session.set_playing(True)
+    current_song_name    = song_name
+    current_sound.volume = current_volume
+    current_sound.play()
 
-        print(f"Now playing: {title} — {artist}")
-    else:
-        print(f"Failed to load: {song_name}")
+    parts  = song_name.split("\n")
+    title  = parts[0].strip()
+    artist = parts[1].strip().lstrip("-").strip() if len(parts) > 1 else "Unknown"
+
+    media_session.update_metadata(title, artist)
+    media_session.set_playing(True)
+
+    if song_bar:
+        song_bar.on_new_song(song_name)
+
+    print(f"Now playing: {title} — {artist}")
 
 
 def switch_screen(screen, screen_name):
@@ -466,13 +611,12 @@ def make_nav_bar(screen, layout):
     btn_playlist.bind(on_press=lambda inst: switch_screen(screen, 'playlist'))
 
     btn_settings = Button(
-        background_normal ="settings_logo.png",
-        size_hint=(None,None),
-        size=(dp(50),dp(50)),
-        pos=(dp(110),dp(0))
+        background_normal="settings_logo.png",
+        size_hint=(None, None),
+        size=(dp(50), dp(50)),
+        pos=(dp(110), dp(0))
     )
     btn_settings.bind(on_press=lambda inst: switch_screen(screen, 'settings'))
-
 
     layout.add_widget(btn_home)
     layout.add_widget(btn_playlist)
@@ -485,13 +629,15 @@ def make_scrollable_content(header_text, screen):
 
     scroll = ScrollView(
         size_hint=(None, None),
-        size=(dp(360), dp(540)),
-        pos=(dp(0), dp(50)),
+        size=(dp(360), dp(490)),
+        pos=(dp(0), dp(100)),
     )
 
     inner = BoxLayout(
         orientation='vertical',
         size_hint_y=None,
+        spacing=dp(2),
+        padding=dp(2)
     )
     inner.bind(minimum_height=inner.setter('height'))
 
@@ -531,6 +677,7 @@ def make_playlist_button(text, callback):
 
     return btn
 
+
 #screens
 class HomeScreen(Screen):
     def __init__(self, **kwargs):
@@ -541,8 +688,8 @@ class HomeScreen(Screen):
         btn0 = Button(
             size_hint=(None, None),
             background_normal="welcome_img.png",
-            size=(dp(360), dp(590)),
-            pos=(dp(0), dp(50))
+            size=(dp(360), dp(490)),
+            pos=(dp(0), dp(100))
         )
 
         btn1 = Button(
@@ -563,8 +710,8 @@ class HomeScreen(Screen):
         btn3 = Button(
             background_normal="settings_logo.png",
             size_hint=(None, None),
-            size=(dp(50),dp(50)),
-            pos=(dp(110),dp(0))
+            size=(dp(50), dp(50)),
+            pos=(dp(110), dp(0))
         )
         btn3.bind(on_press=lambda inst: switch_screen(self, "settings"))
 
@@ -575,15 +722,21 @@ class HomeScreen(Screen):
 
         self.add_widget(layout)
 
+
 class SettingsScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         layout, inner = make_scrollable_content("  Settings", self)
 
-        self.volume_label = Label(text="Volume: 100%")
+        self.volume_label = Label(
+            text="Volume: 100%",
+            size_hint_y=None,
+            height=dp(40),
+            color=(1, 1, 1, 1)
+        )
 
-        slider = Slider(min=0, max=1, value=1.0)
+        slider = Slider(min=0, max=1, value=1.0, size_hint_y=None, height=dp(50))
         slider.bind(value=self.change_volume)
 
         inner.add_widget(self.volume_label)
@@ -592,11 +745,13 @@ class SettingsScreen(Screen):
         self.add_widget(layout)
 
     def change_volume(self, instance, value):
-        global current_sound
+        global current_sound, current_volume
+        current_volume = value
         if current_sound:
             current_sound.volume = value
         percent = int(value * 100)
         self.volume_label.text = f"Volume: {percent}%"
+
 
 class PlaylistScreen(Screen):
     def __init__(self, **kwargs):
@@ -833,7 +988,11 @@ class JPScreen(Screen):
 
 class MyApp(App):
     def build(self):
-        sm = ScreenManager()
+        global song_bar
+
+        root = FloatLayout(size=(dp(360), dp(640)))
+
+        sm = ScreenManager(size_hint=(1, 1))
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(PlaylistScreen(name="playlist"))
         sm.add_widget(AtcScreen(name="against"))
@@ -841,7 +1000,13 @@ class MyApp(App):
         sm.add_widget(JPScreen(name="jp"))
         sm.add_widget(RandomScreen(name="random"))
         sm.add_widget(SettingsScreen(name="settings"))
-        return sm
+
+        song_bar = SongBar()
+
+        root.add_widget(sm)
+        root.add_widget(song_bar)
+
+        return root
 
     def on_pause(self):
         return True
