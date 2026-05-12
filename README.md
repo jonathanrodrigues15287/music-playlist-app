@@ -1,45 +1,44 @@
-A mobile music playlist app built with Python and Kivy.
-
-About
-A simple music playlist manager designed for a 360x640 mobile screen. It lets you browse playlists by artist and view their song lists. Currently includes playlists for Against The Current, Ghost, Judas Priest, and a mixed Random playlist. Only the UI has been added for now.
+Kivy Music Player
+A mobile music player app built with Python and Kivy, designed for Android (360×640px). Features multiple artist playlists, a persistent playback bar, volume control, and Android media session integration.
 
 Features
 
-Home screen with a welcome image
-Browse playlists by artist
-Scrollable song lists
-Simple bottom navigation bar to move between screens
+Multi-playlist support — browse songs by artist: Against The Current, Ghost, Judas Priest, and a Random mix
+Persistent song bar — fixed bottom bar shows the current song title, a play/pause toggle, and a live progress bar
+Volume control — slider in the Settings screen adjusts playback volume in real time
+Pause & resume with seek — pausing saves the playback position; resuming seeks back to that position
+Android Media Session — integrates with Android's system media controls and lock screen metadata (title + artist) via androidx.media
+Screen navigation — Home, Playlists, and Settings screens with a persistent bottom nav bar
 
 Requirements
 
 Python 3.x
-Kivy
-
-Installation
-
-Clone the repository:
-
-git clone https://github.com/your-username/kivy-playlist-app.git
-cd kivy-playlist-app
-
-Install Kivy:
-
-pip install kivy
-
-Run the app:
-
-python main.py
-Image Assets
-The following image files are required in the same directory as main.py:
-
-welcome_img.png — home screen background
-home_logo.png — home navigation icon
-playlist_logo.png — playlist navigation icon
+Kivy (pip install kivy)
+For Android builds: Buildozer with androidx.media in dependencies
+MP3 files placed in a songs/ directory alongside main.py
 
 Project Structure
-kivy-playlist-app/
-├── main.py
-├── welcome_img.png
+project/
+├── main.py                  # All app logic
+├── songs/                   # MP3 files (not included)
+│   ├── its_my_life.mp3
+│   └── ...
 ├── home_logo.png
 ├── playlist_logo.png
-└── README.md
+├── settings_logo.png
+├── play_logo.png
+├── pause_logo.png
+└── welcome_img.png
+
+Adding Songs
+Drop the .mp3 file into the songs/ folder.
+Add an entry to the SONGS dict in main.py:
+python   "Song Title\n -Artist Name": "songs/filename.mp3",
+Add the song string to the relevant screen's song list (e.g. AtcScreen, GhostScreen).
+
+
+Adding a New Playlist
+Create a new Screen subclass (follow the pattern of AtcScreen).
+Register it in MyApp.build():
+python   sm.add_widget(MyNewScreen(name="my_screen"))
+Add a button for it in PlaylistScreen.
