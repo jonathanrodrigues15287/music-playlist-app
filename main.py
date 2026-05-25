@@ -12,6 +12,8 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.core.audio import SoundLoader
 from kivy.uix.slider import Slider
 import time
+import random
+
 
 Window.size = (360, 640)
 
@@ -41,6 +43,12 @@ class PygameSoundWrapper:
     def stop(self):
         pygame.mixer.music.stop()
 
+    def seek(self, pos):
+        global is_paused
+        pygame.mixer.music.play(start=pos)
+        if is_paused:
+            pygame.mixer.music.pause()
+
     def get_pos(self):
         return 0.0
 
@@ -66,6 +74,7 @@ current_volume    = 1.0
 paused_pos        = 0.0   
 play_start_time   = 0.0
 accumulated_time  = 0.0
+current_playlist  = []
 
 song_bar = None
 
@@ -438,6 +447,8 @@ class SongBar(FloatLayout):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._dragging = False
+        self._drag_pos = 0.0
 
         self.size_hint = (None, None)
         self.size      = (dp(360), self.BAR_H)
@@ -506,8 +517,76 @@ class SongBar(FloatLayout):
     def _tick(self, dt):
         self._refresh_progress()
 
+    def on_touch_down(self, touch):
+        if super().on_touch_down(touch):
+            return True
+        
+        if self.collide_point(*touch.pos):
+            if touch.y >= self.y + self.BAR_H - dp(25):
+                self._dragging = True
+                self._update_drag(touch)
+                touch.grab(self)
+                return True
+        return False
+
+    def on_touch_move(self, touch):
+        if touch.grab_current is self:
+            self._update_drag(touch)
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            self._apply_seek()
+            self._dragging = False
+            return True
+        return super().on_touch_up(touch)
+
+    def _update_drag(self, touch):
+        global current_sound
+        if not current_sound:
+            return
+        
+        local_x = touch.x - self.x
+        ratio = max(0.0, min(1.0, local_x / self.width))
+        
+        duration = current_sound.length
+        if not duration or duration <= 0:
+            return
+            
+        self._drag_pos = ratio * duration
+        
+        x, y = self.pos
+        bar_y = y + self.BAR_H - self.PROG_H
+        self._fill.pos  = (x, bar_y)
+        self._fill.size = (self.size[0] * ratio, self.PROG_H)
+
+    def _apply_seek(self):
+        global current_sound, play_start_time, accumulated_time, paused_pos, is_paused
+        if not current_sound:
+            return
+            
+        target_pos = self._drag_pos
+        
+        if USE_PYGAME:
+            current_sound.seek(target_pos)
+        else:
+            if is_paused:
+                paused_pos = target_pos
+            else:
+                current_sound.seek(target_pos)
+                
+        play_start_time = time.time()
+        accumulated_time = target_pos
+        if is_paused:
+            paused_pos = target_pos
+
     def _refresh_progress(self):
         global current_sound, is_paused, paused_pos, play_start_time, accumulated_time
+
+        if self._dragging:
+            return
 
         if is_paused:
             position = paused_pos
@@ -528,14 +607,15 @@ class SongBar(FloatLayout):
             ratio = 0.0
 
         if current_sound and current_sound.state == 'stop' and not is_paused and (time.time() - play_start_time > 0.5):
-            is_paused = False
-            paused_pos = 0.0
-            accumulated_time = 0.0
-            position = 0.0
-            ratio = 0.0
-            self.play_btn.background_normal = "play_logo.png"
-            self.play_btn.background_down   = "play_logo.png"
-            media_session.set_playing(False)
+            if not play_next_song():
+                is_paused = False
+                paused_pos = 0.0
+                accumulated_time = 0.0
+                position = 0.0
+                ratio = 0.0
+                self.play_btn.background_normal = "play_logo.png"
+                self.play_btn.background_down   = "play_logo.png"
+                media_session.set_playing(False)
 
         x, y = self.pos
         bar_y = y + self.BAR_H - self.PROG_H
@@ -639,6 +719,52 @@ def play_music(song_name):
     print(f"Now playing: {title} — {artist}")
 
 
+def play_next_song():
+    global current_playlist, current_song_name
+    if not current_playlist or not current_song_name:
+        return False
+    
+    try:
+        idx = current_playlist.index(current_song_name)
+    except ValueError:
+        idx = -1
+        for i, song in enumerate(current_playlist):
+            if song.strip() == current_song_name.strip():
+                idx = i
+                break
+                
+    if idx == -1:
+        return False
+        
+    next_idx = idx + 1
+    if next_idx >= len(current_playlist):
+        next_idx = 0
+        
+    next_song = current_playlist[next_idx]
+    play_music(next_song)
+    return True
+
+
+def play_playlist_sequential(songs):
+    """Play the playlist in order, starting from the first song."""
+    global current_playlist
+    if not songs:
+        return
+    current_playlist = list(songs)
+    play_music(current_playlist[0])
+
+
+def play_playlist_shuffled(songs):
+    """Shuffle the playlist and start playing from the first shuffled song."""
+    global current_playlist
+    if not songs:
+        return
+    current_playlist = list(songs)
+    random.shuffle(current_playlist)
+    play_music(current_playlist[0])
+
+
+
 def switch_screen(screen, screen_name):
     if screen.manager:
         screen.manager.current = screen_name
@@ -702,9 +828,33 @@ def make_nav_bar(screen, layout):
     layout.add_widget(btn_settings)
 
 
-def make_scrollable_content(header_text, screen):
+def make_scrollable_content(header_text, screen, songs=None):
     layout = FloatLayout()
     layout.add_widget(make_header(header_text))
+
+    # Add playlist play/shuffle buttons in the header area if songs are provided
+    if songs is not None:
+        btn_play = Button(
+            size_hint=(None, None),
+            size=(dp(35), dp(35)),
+            pos=(dp(260), dp(597)),
+            background_normal="playlist_play_logo.png",
+            background_down="playlist_play_logo.png",
+            border=(0, 0, 0, 0),
+        )
+        btn_play.bind(on_press=lambda inst: play_playlist_sequential(songs))
+        layout.add_widget(btn_play)
+
+        btn_shuffle = Button(
+            size_hint=(None, None),
+            size=(dp(35), dp(35)),
+            pos=(dp(305), dp(597)),
+            background_normal="playlist_shuffle_logo.png",
+            background_down="playlist_shuffle_logo.png",
+            border=(0, 0, 0, 0),
+        )
+        btn_shuffle.bind(on_press=lambda inst: play_playlist_shuffled(songs))
+        layout.add_widget(btn_shuffle)
 
     scroll = ScrollView(
         size_hint=(None, None),
@@ -854,14 +1004,11 @@ class PlaylistScreen(Screen):
 
         self.add_widget(layout)
 
-
 class RandomScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        layout, inner = make_scrollable_content(" Random", self)
-
-        songs = [
+        self.songs = [
             " It's My Life\n -Bon Jovi",
             " They Don't Care About Us\n -Michael Jackson",
             " Can't Help Falling in Love \n -Elvis Presley",
@@ -877,23 +1024,24 @@ class RandomScreen(Screen):
             " Numb Little Bug \n -Em Beihold",
         ]
 
-        for song in songs:
+        layout, inner = make_scrollable_content(" Random", self, songs=self.songs)
+
+        for song in self.songs:
             btn = make_playlist_button(song, self.play_song)
             inner.add_widget(btn)
 
         self.add_widget(layout)
 
     def play_song(self, instance):
+        global current_playlist
+        current_playlist = self.songs
         play_music(instance.text)
-
 
 class AtcScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        layout, inner = make_scrollable_content(" Against the Current", self)
-
-        songs = [
+        self.songs = [
             "I Like the Way\n -Against The Current",
             "Runaway\n -Against The Current",
             "Strangers Again\n -Against The Current",
@@ -946,23 +1094,24 @@ class AtcScreen(Screen):
             "Heavenly\n -Against The Current",
         ]
 
-        for song in songs:
+        layout, inner = make_scrollable_content(" Against the Current", self, songs=self.songs)
+
+        for song in self.songs:
             btn = make_playlist_button(song, self.play_song)
             inner.add_widget(btn)
 
         self.add_widget(layout)
 
     def play_song(self, instance):
+        global current_playlist
+        current_playlist = self.songs
         play_music(instance.text)
-
 
 class GhostScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        layout, inner = make_scrollable_content(" Ghost", self)
-
-        songs = [
+        self.songs = [
             "Year Zero\n -Ghost",
             "Mary On A Cross\n -Ghost",
             "Square Hammer\n -Ghost",
@@ -1002,23 +1151,24 @@ class GhostScreen(Screen):
             "Missionary Man\n -Ghost",
         ]
 
-        for song in songs:
+        layout, inner = make_scrollable_content(" Ghost", self, songs=self.songs)
+
+        for song in self.songs:
             btn = make_playlist_button(song, self.play_song)
             inner.add_widget(btn)
 
         self.add_widget(layout)
 
     def play_song(self, instance):
+        global current_playlist
+        current_playlist = self.songs
         play_music(instance.text)
-
 
 class JPScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        layout, inner = make_scrollable_content(" Judas Priest", self)
-
-        songs = [
+        self.songs = [
             "Breaking the Law\n -Judas Priest",
             "You've Got Another Thing Coming\n -Judas Priest",
             "Living After Midnight\n -Judas Priest",
@@ -1056,13 +1206,17 @@ class JPScreen(Screen):
             "Steeler\n -Judas Priest",
         ]
 
-        for song in songs:
+        layout, inner = make_scrollable_content(" Judas Priest", self, songs=self.songs)
+
+        for song in self.songs:
             btn = make_playlist_button(song, self.play_song)
             inner.add_widget(btn)
 
         self.add_widget(layout)
 
     def play_song(self, instance):
+        global current_playlist
+        current_playlist = self.songs
         play_music(instance.text)
 
 class MyApp(App):
