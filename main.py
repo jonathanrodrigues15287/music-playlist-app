@@ -440,10 +440,10 @@ class AndroidMediaSession:
 media_session = AndroidMediaSession()
 
 class SongBar(FloatLayout):
-
     BAR_H  = dp(50)  
     PROG_H = dp(3)   
-    BTN_W  = dp(50)   
+    BTN_W  = dp(45)   
+    BTN_H  = dp(45)   
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -471,8 +471,8 @@ class SongBar(FloatLayout):
         self.title_label = Label(
             text="No song playing",
             size_hint=(None, None),
-            size=(dp(360) - self.BTN_W, self.BAR_H - self.PROG_H),
-            pos=(dp(5), dp(50) + self.PROG_H),
+            size=(dp(360) - self.BTN_W - dp(10), self.BAR_H - self.PROG_H),
+            pos=(dp(5), dp(50)),
             color=(1, 1, 1, 1),
             halign="left",
             valign="middle",
@@ -488,8 +488,8 @@ class SongBar(FloatLayout):
         self.play_btn = Button(
             text="",
             size_hint=(None, None),
-            size=(self.BTN_W, self.BAR_H - self.PROG_H),
-            pos=(dp(360) - self.BTN_W, dp(50) + self.PROG_H),
+            size=(self.BTN_W, self.BTN_H),
+            pos=(dp(360) - self.BTN_W - dp(5), dp(50) + self.BAR_H - self.PROG_H - self.BTN_H),
             background_normal="pause_logo.png",   
             background_down="pause_logo.png",
             border=(0, 0, 0, 0),
@@ -508,8 +508,8 @@ class SongBar(FloatLayout):
 
     def _reposition_children(self, inst, val):
         x, y = self.pos
-        self.title_label.pos = (x + dp(5), y + self.PROG_H)
-        self.play_btn.pos    = (x + dp(360) - self.BTN_W, y + self.PROG_H)
+        self.title_label.pos = (x + dp(5), y)
+        self.play_btn.pos    = (x + dp(360) - self.BTN_W - dp(5), y + self.BAR_H - self.PROG_H - self.BTN_H)
         self._track.pos  = (x, y + self.BAR_H - self.PROG_H)
         self._track.size = (self.size[0], self.PROG_H)
         self._fill.pos   = (x, y + self.BAR_H - self.PROG_H)
