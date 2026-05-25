@@ -15,6 +15,50 @@ import time
 
 Window.size = (360, 640)
 
+USE_PYGAME = False
+try:
+    import pygame
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+    USE_PYGAME = True
+except ImportError:
+    USE_PYGAME = False
+
+class PygameSoundWrapper:
+    def __init__(self, path):
+        self.path = path
+        try:
+            snd = pygame.mixer.Sound(path)
+            self.length = snd.get_length()
+        except Exception:
+            self.length = 0.0
+        pygame.mixer.music.load(path)
+        self._volume = 1.0
+
+    def play(self):
+        pygame.mixer.music.play()
+
+    def stop(self):
+        pygame.mixer.music.stop()
+
+    def get_pos(self):
+        return 0.0
+
+    @property
+    def volume(self):
+        return self._volume
+
+    @volume.setter
+    def volume(self, val):
+        self._volume = val
+        pygame.mixer.music.set_volume(val)
+
+    @property
+    def state(self):
+        if pygame.mixer.music.get_busy():
+            return 'play'
+        return 'stop'
+
 current_sound     = None
 current_song_name = ""
 is_paused         = False
@@ -508,8 +552,11 @@ class SongBar(FloatLayout):
 
         if is_paused:
             pos_to_seek = paused_pos
-            current_sound.play()
-            Clock.schedule_once(lambda dt: current_sound.seek(pos_to_seek), 0.3)
+            if USE_PYGAME:
+                pygame.mixer.music.unpause()
+            else:
+                current_sound.play()
+                Clock.schedule_once(lambda dt: current_sound.seek(pos_to_seek), 0.3)
             is_paused = False
             play_start_time = time.time()
             accumulated_time = pos_to_seek
@@ -521,7 +568,10 @@ class SongBar(FloatLayout):
             if pos <= 0:
                 pos = accumulated_time + (time.time() - play_start_time)
             paused_pos = min(pos, current_sound.length if current_sound.length else pos)
-            current_sound.stop()
+            if USE_PYGAME:
+                pygame.mixer.music.pause()
+            else:
+                current_sound.stop()
             is_paused = True
             self.play_btn.background_normal = "play_logo.png"
             self.play_btn.background_down   = "play_logo.png"
@@ -562,7 +612,10 @@ def play_music(song_name):
     accumulated_time = 0.0
 
     song_path     = SONGS[song_name]
-    current_sound = SoundLoader.load(song_path)
+    if USE_PYGAME:
+        current_sound = PygameSoundWrapper(song_path)
+    else:
+        current_sound = SoundLoader.load(song_path)
 
     if current_sound is None:
         print(f"Could not load file: {song_path}")
