@@ -11,6 +11,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.core.audio import SoundLoader
 from kivy.uix.slider import Slider
+import time
 
 Window.size = (360, 640)
 
@@ -19,6 +20,8 @@ current_song_name = ""
 is_paused         = False
 current_volume    = 1.0
 paused_pos        = 0.0   
+play_start_time   = 0.0
+accumulated_time  = 0.0
 
 song_bar = None
 
@@ -442,7 +445,7 @@ class SongBar(FloatLayout):
         self.bind(pos=self._reposition_children)
         Clock.schedule_once(lambda dt: self._reposition_children(self, None), 0)
 
-        Clock.schedule_interval(self._tick, 1)
+        Clock.schedule_interval(self._tick, 0.05)
 
     def _update_bg(self, *args):
         self._bg.pos  = self.pos
@@ -460,20 +463,35 @@ class SongBar(FloatLayout):
         self._refresh_progress()
 
     def _refresh_progress(self):
-        global current_sound, is_paused
+        global current_sound, is_paused, paused_pos, play_start_time, accumulated_time
 
         if is_paused:
             position = paused_pos
         elif current_sound:
-            position = current_sound.get_pos()
+            pos = current_sound.get_pos()
+            if pos > 0:
+                position = pos
+            else:
+                position = accumulated_time + (time.time() - play_start_time)
         else:
             position = 0.0
 
         duration = current_sound.length if current_sound else 0
         if duration and duration > 0:
+            position = min(position, duration)
             ratio = max(0.0, min(1.0, position / duration))
         else:
             ratio = 0.0
+
+        if current_sound and current_sound.state == 'stop' and not is_paused and (time.time() - play_start_time > 0.5):
+            is_paused = False
+            paused_pos = 0.0
+            accumulated_time = 0.0
+            position = 0.0
+            ratio = 0.0
+            self.play_btn.background_normal = "play_logo.png"
+            self.play_btn.background_down   = "play_logo.png"
+            media_session.set_playing(False)
 
         x, y = self.pos
         bar_y = y + self.BAR_H - self.PROG_H
@@ -483,7 +501,7 @@ class SongBar(FloatLayout):
         self._fill.size  = (self.size[0] * ratio, self.PROG_H)
 
     def _toggle_pause(self, instance):
-        global current_sound, is_paused, paused_pos
+        global current_sound, is_paused, paused_pos, play_start_time, accumulated_time
 
         if current_sound is None:
             return
@@ -493,11 +511,16 @@ class SongBar(FloatLayout):
             current_sound.play()
             Clock.schedule_once(lambda dt: current_sound.seek(pos_to_seek), 0.3)
             is_paused = False
+            play_start_time = time.time()
+            accumulated_time = pos_to_seek
             self.play_btn.background_normal = "pause_logo.png"
             self.play_btn.background_down   = "pause_logo.png"
             media_session.set_playing(True)
         else:
-            paused_pos = current_sound.get_pos()
+            pos = current_sound.get_pos()
+            if pos <= 0:
+                pos = accumulated_time + (time.time() - play_start_time)
+            paused_pos = min(pos, current_sound.length if current_sound.length else pos)
             current_sound.stop()
             is_paused = True
             self.play_btn.background_normal = "play_logo.png"
@@ -505,9 +528,10 @@ class SongBar(FloatLayout):
             media_session.set_playing(False)
 
     def on_new_song(self, song_name):
-        global is_paused, paused_pos
+        global is_paused, paused_pos, accumulated_time
         is_paused  = False
         paused_pos = 0.0
+        accumulated_time = 0.0
         self.play_btn.background_normal = "pause_logo.png"
         self.play_btn.background_down   = "pause_logo.png"
 
@@ -517,7 +541,7 @@ class SongBar(FloatLayout):
         self._refresh_progress()
 
 def play_music(song_name):
-    global current_sound, current_song_name, is_paused, current_volume, paused_pos
+    global current_sound, current_song_name, is_paused, current_volume, paused_pos, play_start_time, accumulated_time
 
     song_name = song_name.strip()
 
@@ -535,6 +559,7 @@ def play_music(song_name):
 
     is_paused  = False
     paused_pos = 0.0
+    accumulated_time = 0.0
 
     song_path     = SONGS[song_name]
     current_sound = SoundLoader.load(song_path)
@@ -546,6 +571,7 @@ def play_music(song_name):
     current_song_name    = song_name
     current_sound.volume = current_volume
     current_sound.play()
+    play_start_time = time.time()
 
     parts  = song_name.split("\n")
     title  = parts[0].strip()
