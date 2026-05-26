@@ -11,6 +11,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.core.audio import SoundLoader
 from kivy.uix.slider import Slider
+from kivy.uix.textinput import TextInput
 import time
 import random
 
@@ -75,6 +76,7 @@ paused_pos        = 0.0
 play_start_time   = 0.0
 accumulated_time  = 0.0
 current_playlist  = []
+is_search_looping = False
 
 song_bar = None
 
@@ -670,9 +672,10 @@ class SongBar(FloatLayout):
 
         self._refresh_progress()
 
-def play_music(song_name):
-    global current_sound, current_song_name, is_paused, current_volume, paused_pos, play_start_time, accumulated_time
+def play_music(song_name, from_search=False):
+    global current_sound, current_song_name, is_paused, current_volume, paused_pos, play_start_time, accumulated_time, is_search_looping
 
+    is_search_looping = from_search
     song_name = song_name.strip()
 
     if song_name not in SONGS:
@@ -720,7 +723,11 @@ def play_music(song_name):
 
 
 def play_next_song():
-    global current_playlist, current_song_name
+    global current_playlist, current_song_name, is_search_looping
+    if is_search_looping and current_song_name:
+        play_music(current_song_name)
+        return True
+
     if not current_playlist or not current_song_name:
         return False
     
@@ -747,18 +754,20 @@ def play_next_song():
 
 def play_playlist_sequential(songs):
     """Play the playlist in order, starting from the first song."""
-    global current_playlist
+    global current_playlist, is_search_looping
     if not songs:
         return
+    is_search_looping = False
     current_playlist = list(songs)
     play_music(current_playlist[0])
 
 
 def play_playlist_shuffled(songs):
     """Shuffle the playlist and start playing from the first shuffled song."""
-    global current_playlist
+    global current_playlist, is_search_looping
     if not songs:
         return
+    is_search_looping = False
     current_playlist = list(songs)
     random.shuffle(current_playlist)
     play_music(current_playlist[0])
@@ -912,15 +921,35 @@ class HomeScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        layout = FloatLayout()
+        self.layout = FloatLayout()
 
-        btn0 = Button(
+        # Welcome image (default home view)
+        self.welcome_btn = Button(
             size_hint=(None, None),
             background_normal="welcome_img.png",
             size=(dp(360), dp(490)),
             pos=(dp(0), dp(100))
         )
 
+        # Search results ScrollView (hidden by default)
+        self.results_scroll = ScrollView(
+            size_hint=(None, None),
+            size=(dp(360), dp(490)),
+            pos=(dp(0), dp(100)),
+            opacity=0,
+            disabled=True
+        )
+
+        self.results_box = BoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            spacing=dp(2),
+            padding=dp(2)
+        )
+        self.results_box.bind(minimum_height=self.results_box.setter('height'))
+        self.results_scroll.add_widget(self.results_box)
+
+        # Bottom navigation buttons
         btn1 = Button(
             size_hint=(None, None),
             background_normal="home_logo.png",
@@ -944,12 +973,109 @@ class HomeScreen(Screen):
         )
         btn3.bind(on_press=lambda inst: switch_screen(self, "settings"))
 
-        layout.add_widget(btn0)
-        layout.add_widget(btn1)
-        layout.add_widget(btn2)
-        layout.add_widget(btn3)
+        # Search Header
+        self.header_layout = FloatLayout(
+            size_hint=(None, None),
+            size=(dp(360), dp(50)),
+            pos=(dp(0), dp(590))
+        )
 
-        self.add_widget(layout)
+        # Draw a line at the bottom of the header to match other screens
+        with self.header_layout.canvas.after:
+            Color(0, 0, 1, 1)  # Blue line
+            self.header_layout.header_line = Line(width=2)
+
+        def update_header_line(inst, val):
+            x, y = inst.pos
+            w, _ = inst.size
+            inst.header_line.points = [x, y, x + w, y]
+
+        self.header_layout.bind(pos=update_header_line, size=update_header_line)
+        Clock.schedule_once(lambda dt: update_header_line(self.header_layout, None), 0)
+
+        # Search logo button/icon
+        self.search_icon = Button(
+            size_hint=(None, None),
+            size=(dp(30), dp(30)),
+            pos=(dp(10), dp(600)),
+            background_normal="search_logo.png",
+            background_down="search_logo.png",
+            border=(0, 0, 0, 0)
+        )
+        self.search_icon.bind(on_press=lambda inst: setattr(self.search_input, 'focus', True))
+
+        # Search text input
+        self.search_input = TextInput(
+            hint_text="Search songs...",
+            multiline=False,
+            size_hint=(None, None),
+            size=(dp(300), dp(36)),
+            pos=(dp(50), dp(597)),
+            background_color=(0.15, 0.15, 0.15, 1),
+            foreground_color=(1, 1, 1, 1),
+            hint_text_color=(0.6, 0.6, 0.6, 1),
+            font_size=dp(14),
+            padding=(dp(10), dp(8), dp(10), dp(8)),
+            border=(1, 1, 1, 1)
+        )
+        self.search_input.bind(text=self.on_search_text)
+
+        self.header_layout.add_widget(self.search_icon)
+        self.header_layout.add_widget(self.search_input)
+
+        # Add all widgets to the main screen layout
+        self.layout.add_widget(self.welcome_btn)
+        self.layout.add_widget(self.results_scroll)
+        self.layout.add_widget(btn1)
+        self.layout.add_widget(btn2)
+        self.layout.add_widget(btn3)
+        self.layout.add_widget(self.header_layout)
+
+        self.add_widget(self.layout)
+
+    def on_enter(self, *args):
+        # Clear search input when returning to home screen
+        self.search_input.text = ""
+
+    def on_search_text(self, instance, value):
+        query = value.strip().lower()
+        self.results_box.clear_widgets()
+
+        if not query:
+            self.results_scroll.opacity = 0
+            self.results_scroll.disabled = True
+            self.welcome_btn.opacity = 1
+            self.welcome_btn.disabled = False
+            return
+
+        self.results_scroll.opacity = 1
+        self.results_scroll.disabled = False
+        self.welcome_btn.opacity = 0
+        self.welcome_btn.disabled = True
+
+        matching_songs = []
+        for song in SONGS.keys():
+            if query in song.lower():
+                matching_songs.append(song)
+
+        if not matching_songs:
+            no_results_label = Label(
+                text="No songs found",
+                size_hint_y=None,
+                height=dp(50),
+                color=(0.6, 0.6, 0.6, 1)
+            )
+            self.results_box.add_widget(no_results_label)
+        else:
+            self.current_results = matching_songs
+            for song in matching_songs:
+                btn = make_playlist_button(song, self.play_song)
+                self.results_box.add_widget(btn)
+
+    def play_song(self, instance):
+        global current_playlist
+        current_playlist = getattr(self, 'current_results', [instance.text])
+        play_music(instance.text, from_search=True)
 
 
 class SettingsScreen(Screen):
