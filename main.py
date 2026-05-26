@@ -45,9 +45,8 @@ class PygameSoundWrapper:
         pygame.mixer.music.stop()
 
     def seek(self, pos):
-        global is_paused
         pygame.mixer.music.play(start=pos)
-        if is_paused:
+        if player.is_paused:
             pygame.mixer.music.pause()
 
     def get_pos(self):
@@ -68,17 +67,21 @@ class PygameSoundWrapper:
             return 'play'
         return 'stop'
 
-current_sound     = None
-current_song_name = ""
-is_paused         = False
-current_volume    = 1.0
-paused_pos        = 0.0   
-play_start_time   = 0.0
-accumulated_time  = 0.0
-current_playlist  = []
-is_search_looping = False
 
-song_bar = None
+class PlayerState:
+    def __init__(self):
+        self.sound = None
+        self.song_name = ""
+        self.is_paused = False
+        self.volume = 1.0
+        self.paused_pos = 0.0
+        self.song_bar = None
+        self.play_start_time = 0.0
+        self.accumulated_time = 0.0
+        self.current_playlist = []
+        self.is_search_looping = False
+
+player = PlayerState()  # single instance, module-level
 
 SONGS = {
 
@@ -546,14 +549,13 @@ class SongBar(FloatLayout):
         return super().on_touch_up(touch)
 
     def _update_drag(self, touch):
-        global current_sound
-        if not current_sound:
+        if not player.sound:
             return
         
         local_x = touch.x - self.x
         ratio = max(0.0, min(1.0, local_x / self.width))
         
-        duration = current_sound.length
+        duration = player.sound.length
         if not duration or duration <= 0:
             return
             
@@ -565,54 +567,51 @@ class SongBar(FloatLayout):
         self._fill.size = (self.size[0] * ratio, self.PROG_H)
 
     def _apply_seek(self):
-        global current_sound, play_start_time, accumulated_time, paused_pos, is_paused
-        if not current_sound:
+        if not player.sound:
             return
             
         target_pos = self._drag_pos
         
         if USE_PYGAME:
-            current_sound.seek(target_pos)
+            player.sound.seek(target_pos)
         else:
-            if is_paused:
-                paused_pos = target_pos
+            if player.is_paused:
+                player.paused_pos = target_pos
             else:
-                current_sound.seek(target_pos)
+                player.sound.seek(target_pos)
                 
-        play_start_time = time.time()
-        accumulated_time = target_pos
-        if is_paused:
-            paused_pos = target_pos
+        player.play_start_time = time.time()
+        player.accumulated_time = target_pos
+        if player.is_paused:
+            player.paused_pos = target_pos
 
     def _refresh_progress(self):
-        global current_sound, is_paused, paused_pos, play_start_time, accumulated_time
-
         if self._dragging:
             return
 
-        if is_paused:
-            position = paused_pos
-        elif current_sound:
-            pos = current_sound.get_pos()
+        if player.is_paused:
+            position = player.paused_pos
+        elif player.sound:
+            pos = player.sound.get_pos()
             if pos > 0:
                 position = pos
             else:
-                position = accumulated_time + (time.time() - play_start_time)
+                position = player.accumulated_time + (time.time() - player.play_start_time)
         else:
             position = 0.0
 
-        duration = current_sound.length if current_sound else 0
+        duration = player.sound.length if player.sound else 0
         if duration and duration > 0:
             position = min(position, duration)
             ratio = max(0.0, min(1.0, position / duration))
         else:
             ratio = 0.0
 
-        if current_sound and current_sound.state == 'stop' and not is_paused and (time.time() - play_start_time > 0.5):
+        if player.sound and player.sound.state == 'stop' and not player.is_paused and (time.time() - player.play_start_time > 0.5):
             if not play_next_song():
-                is_paused = False
-                paused_pos = 0.0
-                accumulated_time = 0.0
+                player.is_paused = False
+                player.paused_pos = 0.0
+                player.accumulated_time = 0.0
                 position = 0.0
                 ratio = 0.0
                 self.play_btn.background_normal = "play_logo.png"
@@ -627,43 +626,40 @@ class SongBar(FloatLayout):
         self._fill.size  = (self.size[0] * ratio, self.PROG_H)
 
     def _toggle_pause(self, instance):
-        global current_sound, is_paused, paused_pos, play_start_time, accumulated_time
-
-        if current_sound is None:
+        if player.sound is None:
             return
 
-        if is_paused:
-            pos_to_seek = paused_pos
+        if player.is_paused:
+            pos_to_seek = player.paused_pos
             if USE_PYGAME:
                 pygame.mixer.music.unpause()
             else:
-                current_sound.play()
-                Clock.schedule_once(lambda dt: current_sound.seek(pos_to_seek), 0.3)
-            is_paused = False
-            play_start_time = time.time()
-            accumulated_time = pos_to_seek
+                player.sound.play()
+                Clock.schedule_once(lambda dt: player.sound.seek(pos_to_seek), 0.3)
+            player.is_paused = False
+            player.play_start_time = time.time()
+            player.accumulated_time = pos_to_seek
             self.play_btn.background_normal = "pause_logo.png"
             self.play_btn.background_down   = "pause_logo.png"
             media_session.set_playing(True)
         else:
-            pos = current_sound.get_pos()
+            pos = player.sound.get_pos()
             if pos <= 0:
-                pos = accumulated_time + (time.time() - play_start_time)
-            paused_pos = min(pos, current_sound.length if current_sound.length else pos)
+                pos = player.accumulated_time + (time.time() - player.play_start_time)
+            player.paused_pos = min(pos, player.sound.length if player.sound.length else pos)
             if USE_PYGAME:
                 pygame.mixer.music.pause()
             else:
-                current_sound.stop()
-            is_paused = True
+                player.sound.stop()
+            player.is_paused = True
             self.play_btn.background_normal = "play_logo.png"
             self.play_btn.background_down   = "play_logo.png"
             media_session.set_playing(False)
 
     def on_new_song(self, song_name):
-        global is_paused, paused_pos, accumulated_time
-        is_paused  = False
-        paused_pos = 0.0
-        accumulated_time = 0.0
+        player.is_paused  = False
+        player.paused_pos = 0.0
+        player.accumulated_time = 0.0
         self.play_btn.background_normal = "pause_logo.png"
         self.play_btn.background_down   = "pause_logo.png"
 
@@ -673,9 +669,7 @@ class SongBar(FloatLayout):
         self._refresh_progress()
 
 def play_music(song_name, from_search=False):
-    global current_sound, current_song_name, is_paused, current_volume, paused_pos, play_start_time, accumulated_time, is_search_looping
-
-    is_search_looping = from_search
+    player.is_search_looping = from_search
     song_name = song_name.strip()
 
     if song_name not in SONGS:
@@ -686,28 +680,28 @@ def play_music(song_name, from_search=False):
             print(f"No song file mapped for: {song_name}")
             return
 
-    if current_sound:
-        current_sound.stop()
-        current_sound = None
+    if player.sound:
+        player.sound.stop()
+        player.sound = None
 
-    is_paused  = False
-    paused_pos = 0.0
-    accumulated_time = 0.0
+    player.is_paused  = False
+    player.paused_pos = 0.0
+    player.accumulated_time = 0.0
 
     song_path     = SONGS[song_name]
     if USE_PYGAME:
-        current_sound = PygameSoundWrapper(song_path)
+        player.sound = PygameSoundWrapper(song_path)
     else:
-        current_sound = SoundLoader.load(song_path)
+        player.sound = SoundLoader.load(song_path)
 
-    if current_sound is None:
+    if player.sound is None:
         print(f"Could not load file: {song_path}")
         return
 
-    current_song_name    = song_name
-    current_sound.volume = current_volume
-    current_sound.play()
-    play_start_time = time.time()
+    player.song_name    = song_name
+    player.sound.volume = player.volume
+    player.sound.play()
+    player.play_start_time = time.time()
 
     parts  = song_name.split("\n")
     title  = parts[0].strip()
@@ -716,27 +710,26 @@ def play_music(song_name, from_search=False):
     media_session.update_metadata(title, artist)
     media_session.set_playing(True)
 
-    if song_bar:
-        song_bar.on_new_song(song_name)
+    if player.song_bar:
+        player.song_bar.on_new_song(song_name)
 
     print(f"Now playing: {title} — {artist}")
 
 
 def play_next_song():
-    global current_playlist, current_song_name, is_search_looping
-    if is_search_looping and current_song_name:
-        play_music(current_song_name)
+    if player.is_search_looping and player.song_name:
+        play_music(player.song_name, from_search=True)
         return True
 
-    if not current_playlist or not current_song_name:
+    if not player.current_playlist or not player.song_name:
         return False
     
     try:
-        idx = current_playlist.index(current_song_name)
+        idx = player.current_playlist.index(player.song_name)
     except ValueError:
         idx = -1
-        for i, song in enumerate(current_playlist):
-            if song.strip() == current_song_name.strip():
+        for i, song in enumerate(player.current_playlist):
+            if song.strip() == player.song_name.strip():
                 idx = i
                 break
                 
@@ -744,33 +737,31 @@ def play_next_song():
         return False
         
     next_idx = idx + 1
-    if next_idx >= len(current_playlist):
+    if next_idx >= len(player.current_playlist):
         next_idx = 0
         
-    next_song = current_playlist[next_idx]
+    next_song = player.current_playlist[next_idx]
     play_music(next_song)
     return True
 
 
 def play_playlist_sequential(songs):
     """Play the playlist in order, starting from the first song."""
-    global current_playlist, is_search_looping
     if not songs:
         return
-    is_search_looping = False
-    current_playlist = list(songs)
-    play_music(current_playlist[0])
+    player.is_search_looping = False
+    player.current_playlist = list(songs)
+    play_music(player.current_playlist[0])
 
 
 def play_playlist_shuffled(songs):
     """Shuffle the playlist and start playing from the first shuffled song."""
-    global current_playlist, is_search_looping
     if not songs:
         return
-    is_search_looping = False
-    current_playlist = list(songs)
-    random.shuffle(current_playlist)
-    play_music(current_playlist[0])
+    player.is_search_looping = False
+    player.current_playlist = list(songs)
+    random.shuffle(player.current_playlist)
+    play_music(player.current_playlist[0])
 
 
 
@@ -1073,8 +1064,7 @@ class HomeScreen(Screen):
                 self.results_box.add_widget(btn)
 
     def play_song(self, instance):
-        global current_playlist
-        current_playlist = getattr(self, 'current_results', [instance.text])
+        player.current_playlist = getattr(self, 'current_results', [instance.text])
         play_music(instance.text, from_search=True)
 
 
@@ -1100,10 +1090,9 @@ class SettingsScreen(Screen):
         self.add_widget(layout)
 
     def change_volume(self, instance, value):
-        global current_sound, current_volume
-        current_volume = value
-        if current_sound:
-            current_sound.volume = value
+        player.volume = value
+        if player.sound:
+            player.sound.volume = value
         percent = int(value * 100)
         self.volume_label.text = f"Volume: {percent}%"
 
@@ -1159,8 +1148,7 @@ class RandomScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        global current_playlist
-        current_playlist = self.songs
+        player.current_playlist = self.songs
         play_music(instance.text)
 
 class AtcScreen(Screen):
@@ -1229,8 +1217,7 @@ class AtcScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        global current_playlist
-        current_playlist = self.songs
+        player.current_playlist = self.songs
         play_music(instance.text)
 
 class GhostScreen(Screen):
@@ -1286,8 +1273,7 @@ class GhostScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        global current_playlist
-        current_playlist = self.songs
+        player.current_playlist = self.songs
         play_music(instance.text)
 
 class JPScreen(Screen):
@@ -1341,14 +1327,11 @@ class JPScreen(Screen):
         self.add_widget(layout)
 
     def play_song(self, instance):
-        global current_playlist
-        current_playlist = self.songs
+        player.current_playlist = self.songs
         play_music(instance.text)
 
 class MyApp(App):
     def build(self):
-        global song_bar
-
         root = FloatLayout(size=(dp(360), dp(640)))
 
         sm = ScreenManager(size_hint=(1, 1))
@@ -1360,10 +1343,10 @@ class MyApp(App):
         sm.add_widget(RandomScreen(name="random"))
         sm.add_widget(SettingsScreen(name="settings"))
 
-        song_bar = SongBar()
+        player.song_bar = SongBar()
 
         root.add_widget(sm)
-        root.add_widget(song_bar)
+        root.add_widget(player.song_bar)
 
         return root
 
@@ -1371,9 +1354,8 @@ class MyApp(App):
         return True
 
     def on_stop(self):
-        global current_sound
-        if current_sound:
-            current_sound.stop()
+        if player.sound:
+            player.sound.stop()
         media_session.release()
 
 
