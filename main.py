@@ -460,17 +460,17 @@ class SongBar(FloatLayout):
         self.pos       = (0, dp(50))   
         
         with self.canvas.before:
-            Color(0.1, 0.1, 0.1, 1)
+            Color(0.05, 0.05, 0.05, 1)
             self._bg = Rectangle(pos=self.pos, size=self.size)
 
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         with self.canvas:
-            Color(0.25, 0.25, 0.25, 1)
+            Color(0.2, 0.2, 0.2, 1)
             self._track = Rectangle(pos=self.pos, size=(dp(360), self.PROG_H))
 
         with self.canvas:
-            Color(0, 0.5, 1, 1)
+            Color(0.0, 0.9, 1.0, 1)
             self._fill = Rectangle(pos=self.pos, size=(0, self.PROG_H))
 
         self.title_label = Label(
@@ -780,16 +780,24 @@ def make_header(text):
         halign="left",
         valign="middle",
         padding_x=dp(15),
+        bold=True,
+        font_size=dp(18)
     )
     lbl.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
 
+    with lbl.canvas.before:
+        Color(0.07, 0.07, 0.07, 1)
+        lbl.bg = Rectangle(pos=lbl.pos, size=lbl.size)
+
     with lbl.canvas.after:
-        Color(0, 0, 1, 1)
-        lbl.border_line = Line(width=2)
+        Color(0.0, 0.9, 1.0, 1)
+        lbl.border_line = Line(width=1.5)
 
     def update_line(inst, val):
         x, y = inst.pos
         w, _ = inst.size
+        inst.bg.pos = inst.pos
+        inst.bg.size = inst.size
         inst.border_line.points = [x, y, x + w, y]
 
     lbl.bind(pos=update_line, size=update_line)
@@ -799,6 +807,21 @@ def make_header(text):
 
 
 def make_nav_bar(screen, layout):
+    nav_bg = Label(size_hint=(None, None), size=(dp(360), dp(50)), pos=(dp(0), dp(0)))
+    with nav_bg.canvas.before:
+        Color(0.07, 0.07, 0.07, 1)
+        nav_bg.rect = Rectangle(pos=nav_bg.pos, size=nav_bg.size)
+        Color(0.0, 0.9, 1.0, 1)
+        nav_bg.line = Line(points=[nav_bg.x, nav_bg.y+nav_bg.height, nav_bg.right, nav_bg.y+nav_bg.height], width=1)
+        
+    def update_nav(inst, val):
+        inst.rect.pos = inst.pos
+        inst.rect.size = inst.size
+        inst.line.points = [inst.x, inst.y+inst.height, inst.right, inst.y+inst.height]
+
+    nav_bg.bind(pos=update_nav, size=update_nav)
+    layout.add_widget(nav_bg)
+
     btn_home = Button(
         background_normal="home_logo.png",
         size_hint=(None, None),
@@ -881,19 +904,29 @@ def make_playlist_button(text, callback):
     btn = Button(
         text=text,
         size_hint=(1, None),
-        height=dp(50),
+        height=dp(60),
         background_normal="",
-        background_color=(0, 0, 0, 1),
-        color=(0.68, 0.85, 0.90, 1),
+        background_color=(0.08, 0.08, 0.08, 1),
+        background_down="",
+        color=(0.9, 0.9, 0.9, 1),
         halign="left",
         valign="middle",
-        padding_x=dp(15),
+        padding_x=dp(20),
+        font_size=dp(15),
     )
+    
+    def on_state(instance, value):
+        if value == 'down':
+            instance.background_color = (0.2, 0.2, 0.2, 1)
+        else:
+            instance.background_color = (0.08, 0.08, 0.08, 1)
+            
+    btn.bind(state=on_state)
     btn.bind(size=lambda inst, val: setattr(inst, 'text_size', inst.size))
     btn.bind(on_press=callback)
 
     with btn.canvas.after:
-        Color(0.6, 0.6, 0.6, 1)
+        Color(0.2, 0.2, 0.2, 1)
         btn.divider = Line(width=1)
 
     def update_divider(inst, val):
@@ -941,6 +974,20 @@ class HomeScreen(Screen):
         self.results_scroll.add_widget(self.results_box)
 
         # Bottom navigation buttons
+        self.nav_bg = Label(size_hint=(None, None), size=(dp(360), dp(50)), pos=(dp(0), dp(0)))
+        with self.nav_bg.canvas.before:
+            Color(0.07, 0.07, 0.07, 1)
+            self.nav_bg.rect = Rectangle(pos=self.nav_bg.pos, size=self.nav_bg.size)
+            Color(0.0, 0.9, 1.0, 1)
+            self.nav_bg.line = Line(points=[self.nav_bg.x, self.nav_bg.y+self.nav_bg.height, self.nav_bg.right, self.nav_bg.y+self.nav_bg.height], width=1)
+            
+        def update_home_nav(inst, val):
+            inst.rect.pos = inst.pos
+            inst.rect.size = inst.size
+            inst.line.points = [inst.x, inst.y+inst.height, inst.right, inst.y+inst.height]
+
+        self.nav_bg.bind(pos=update_home_nav, size=update_home_nav)
+
         btn1 = Button(
             size_hint=(None, None),
             background_normal="home_logo.png",
@@ -972,13 +1019,19 @@ class HomeScreen(Screen):
         )
 
         # Draw a line at the bottom of the header to match other screens
+        with self.header_layout.canvas.before:
+            Color(0.07, 0.07, 0.07, 1)
+            self.header_layout.bg = Rectangle(pos=self.header_layout.pos, size=self.header_layout.size)
+            
         with self.header_layout.canvas.after:
-            Color(0, 0, 1, 1)  # Blue line
-            self.header_layout.header_line = Line(width=2)
+            Color(0.0, 0.9, 1.0, 1)  # Cyan line
+            self.header_layout.header_line = Line(width=1.5)
 
         def update_header_line(inst, val):
             x, y = inst.pos
             w, _ = inst.size
+            inst.bg.pos = inst.pos
+            inst.bg.size = inst.size
             inst.header_line.points = [x, y, x + w, y]
 
         self.header_layout.bind(pos=update_header_line, size=update_header_line)
@@ -1017,6 +1070,7 @@ class HomeScreen(Screen):
         # Add all widgets to the main screen layout
         self.layout.add_widget(self.welcome_btn)
         self.layout.add_widget(self.results_scroll)
+        self.layout.add_widget(self.nav_bg)
         self.layout.add_widget(btn1)
         self.layout.add_widget(btn2)
         self.layout.add_widget(btn3)
