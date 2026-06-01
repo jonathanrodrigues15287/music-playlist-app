@@ -14,6 +14,9 @@ from kivy.uix.slider import Slider
 from kivy.uix.textinput import TextInput
 import time
 import random
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 Window.size = (360, 640)
@@ -68,7 +71,7 @@ class PygameSoundWrapper:
             return 'play'
         return 'stop'
 
-
+#global state object
 class PlayerState:
     def __init__(self):
         self.sound = None
@@ -84,22 +87,24 @@ class PlayerState:
 
 player = PlayerState() 
 
+#random songs playlist
 RANDOM_SONGS = {
-    " It's My Life\n -Bon Jovi": "songs/its_my_life.mp3",
-    " They Don't Care About Us\n -Michael Jackson": "songs/they_dont_care_about_us.mp3",
-    " Can't Help Falling in Love \n -Elvis Presley": "songs/cant_help_falling_in_love.mp3",
-    " All of Me \n -John Legend": "songs/all_of_me.mp3",
-    " Hymn For the Weekend \n -Coldplay": "songs/hymn_for_the_weekend.mp3",
-    " Way Down we go \n -Kaleo": "songs/way_down_we_go.mp3",
-    " House of Memories \n -Panic! At the Disco": "songs/house_of_memories.mp3",
-    " Another Love \n -Tom Odell": "songs/another_love.mp3",
-    " Superbeast \n -Rob Zombie": "songs/superbeast.mp3",
-    " Ordinary \n -Alex Warren": "songs/ordinary.mp3",
-    " Bella Ciao \n -Manu Pilas": "songs/bella_ciao.mp3",
-    " Oh What a Circus \n -Antonio Banderas": "songs/oh_what_a_circus.mp3",
-    " Numb Little Bug \n -Em Beihold": "songs/numb_little_bug.mp3",
+    "It's My Life\n -Bon Jovi": "songs/its_my_life.mp3",
+    "They Don't Care About Us\n -Michael Jackson": "songs/they_dont_care_about_us.mp3",
+    "Can't Help Falling in Love\n -Elvis Presley": "songs/cant_help_falling_in_love.mp3",
+    "All of Me\n -John Legend": "songs/all_of_me.mp3",
+    "Hymn For the Weekend\n -Coldplay": "songs/hymn_for_the_weekend.mp3",
+    "Way Down we go\n -Kaleo": "songs/way_down_we_go.mp3",
+    "House of Memories\n -Panic! At the Disco": "songs/house_of_memories.mp3",
+    "Another Love\n -Tom Odell": "songs/another_love.mp3",
+    "Superbeast\n -Rob Zombie": "songs/superbeast.mp3",
+    "Ordinary\n -Alex Warren": "songs/ordinary.mp3",
+    "Bella Ciao\n -Manu Pilas": "songs/bella_ciao.mp3",
+    "Oh What a Circus\n -Antonio Banderas": "songs/oh_what_a_circus.mp3",
+    "Numb Little Bug\n -Em Beihold": "songs/numb_little_bug.mp3",
 }
 
+#judas priest playlist
 JP_SONGS = {
     "Breaking the Law\n -Judas Priest": "songs/breaking_the_law.mp3",
     "You've Got Another Thing Coming\n -Judas Priest": "songs/youve_got_another_thing_coming.mp3",
@@ -138,6 +143,7 @@ JP_SONGS = {
     "Steeler\n -Judas Priest": "songs/steeler.mp3",
 }
 
+#against the current playlist
 ATC_SONGS = {
     "I Like the Way\n -Against The Current": "songs/i_like_the_way.mp3",
     "Runaway\n -Against The Current": "songs/runaway.mp3",
@@ -192,6 +198,7 @@ ATC_SONGS = {
     "Dead Man Walking\n -Against The Current": "songs/dead_man_walking.mp3",
 }
 
+#ghost playlist
 GHOST_SONGS = {
     "Year Zero\n -Ghost": "songs/year_zero.mp3",
     "Mary On A Cross\n -Ghost": "songs/mary_on_a_cross.mp3",
@@ -235,6 +242,7 @@ GHOST_SONGS = {
 SONGS = {**RANDOM_SONGS, **JP_SONGS, **ATC_SONGS, **GHOST_SONGS}
 
 
+#bridge between app and android media controls
 class AndroidMediaSession:
     def __init__(self):
         self.session = None
@@ -275,10 +283,10 @@ class AndroidMediaSession:
             self.session.setPlaybackState(state)
             self.session.setActive(True)
 
-            print("MediaSession initialised successfully")
+            logging.info("MediaSession initialised successfully")
 
         except Exception as e:
-            print(f"MediaSession not available (non-Android): {e}")
+            logging.warning(f"MediaSession not available (non-Android): {e}")
             self.session = None
 
     def update_metadata(self, title, artist):
@@ -291,7 +299,7 @@ class AndroidMediaSession:
                         .build())
             self.session.setMetadata(metadata)
         except Exception as e:
-            print(f"MediaSession metadata error: {e}")
+            logging.error(f"MediaSession metadata error: {e}")
 
     def set_playing(self, is_playing):
         if not self.session:
@@ -305,7 +313,7 @@ class AndroidMediaSession:
                      .build())
             self.session.setPlaybackState(state)
         except Exception as e:
-            print(f"MediaSession state error: {e}")
+            logging.error(f"MediaSession state error: {e}")
 
     def release(self):
         if self.session:
@@ -314,6 +322,7 @@ class AndroidMediaSession:
 
 media_session = AndroidMediaSession()
 
+#song bar controls and ui design 
 class SongBar(FloatLayout):
     BAR_H  = dp(50)  
     PROG_H = dp(3)   
@@ -538,6 +547,7 @@ class SongBar(FloatLayout):
 
         self._refresh_progress()
 
+#plays song after selection
 def play_music(song_name, from_search=False):
     player.is_search_looping = from_search
     song_name = song_name.strip()
@@ -547,7 +557,7 @@ def play_music(song_name, from_search=False):
         if spaced in SONGS:
             song_name = spaced
         else:
-            print(f"No song file mapped for: {song_name}")
+            logging.warning(f"No song file mapped for: {song_name}")
             return
 
     if player.sound:
@@ -565,7 +575,7 @@ def play_music(song_name, from_search=False):
         player.sound = SoundLoader.load(song_path)
 
     if player.sound is None:
-        print(f"Could not load file: {song_path}")
+        logging.error(f"Could not load file: {song_path}")
         return
 
     player.song_name    = song_name
@@ -583,9 +593,10 @@ def play_music(song_name, from_search=False):
     if player.song_bar:
         player.song_bar.on_new_song(song_name)
 
-    print(f"Now playing: {title} — {artist}")
+    logging.info(f"Now playing: {title} — {artist}")
 
 
+#plays next song in current playlist
 def play_next_song():
     if player.is_search_looping and player.song_name:
         play_music(player.song_name, from_search=True)
@@ -615,8 +626,8 @@ def play_next_song():
     return True
 
 
+#play playlist in sequential order
 def play_playlist_sequential(songs):
-    """Play the playlist in order, starting from the first song."""
     if not songs:
         return
     player.is_search_looping = False
@@ -624,8 +635,8 @@ def play_playlist_sequential(songs):
     play_music(player.current_playlist[0])
 
 
+#plays the playlist in a shuffled order 
 def play_playlist_shuffled(songs):
-    """Shuffle the playlist and start playing from the first shuffled song."""
     if not songs:
         return
     player.is_search_looping = False
@@ -634,12 +645,13 @@ def play_playlist_shuffled(songs):
     play_music(player.current_playlist[0])
 
 
-
+#switches the current screen
 def switch_screen(screen, screen_name):
     if screen.manager:
         screen.manager.current = screen_name
 
 
+#creates the header for each screen
 def make_header(text):
     lbl = Label(
         text=text,
@@ -676,6 +688,7 @@ def make_header(text):
     return lbl
 
 
+#creates the navigation bar for each screen
 def make_nav_bar(screen, layout):
     nav_bg = Label(size_hint=(None, None), size=(dp(360), dp(50)), pos=(dp(0), dp(0)))
     with nav_bg.canvas.before:
@@ -721,6 +734,7 @@ def make_nav_bar(screen, layout):
     layout.add_widget(btn_settings)
 
 
+#makes a scrollable list of songs
 def make_scrollable_content(header_text, screen, songs=None):
     layout = FloatLayout()
     layout.add_widget(make_header(header_text))
@@ -749,12 +763,14 @@ def make_scrollable_content(header_text, screen, songs=None):
         btn_shuffle.bind(on_press=lambda inst: play_playlist_shuffled(songs))
         layout.add_widget(btn_shuffle)
 
+    #scrollable list of songs 
     scroll = ScrollView(
         size_hint=(None, None),
         size=(dp(360), dp(490)),
         pos=(dp(0), dp(100)),
     )
 
+    #creates the inner layout for the scrollable list of songs 
     inner = BoxLayout(
         orientation='vertical',
         size_hint_y=None,
@@ -770,6 +786,7 @@ def make_scrollable_content(header_text, screen, songs=None):
     return layout, inner
 
 
+#makes a button for each playlist
 def make_playlist_button(text, callback):
     btn = Button(
         text=text,
@@ -810,7 +827,7 @@ def make_playlist_button(text, callback):
     return btn
 
 
-#screens
+#home screen
 class HomeScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -992,6 +1009,7 @@ class HomeScreen(Screen):
         play_music(instance.text, from_search=True)
 
 
+#settings screen
 class SettingsScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -1021,6 +1039,7 @@ class SettingsScreen(Screen):
         self.volume_label.text = f"Volume: {percent}%"
 
 
+#playlist tab screen
 class PlaylistScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -1043,13 +1062,17 @@ class PlaylistScreen(Screen):
 
         self.add_widget(layout)
 
-class RandomScreen(Screen):
-    def __init__(self, **kwargs):
+
+
+
+
+
+class PlaylistDetailScreen(Screen):
+    def __init__(self, title, songs, **kwargs):
         super().__init__(**kwargs)
+        self.songs = songs
 
-        self.songs = list(RANDOM_SONGS.keys())
-
-        layout, inner = make_scrollable_content(" Random", self, songs=self.songs)
+        layout, inner = make_scrollable_content(f" {title}", self, songs=self.songs)
 
         for song in self.songs:
             btn = make_playlist_button(song, self.play_song)
@@ -1061,60 +1084,7 @@ class RandomScreen(Screen):
         player.current_playlist = self.songs
         play_music(instance.text)
 
-class AtcScreen(Screen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        self.songs = list(ATC_SONGS.keys())
-
-        layout, inner = make_scrollable_content(" Against the Current", self, songs=self.songs)
-
-        for song in self.songs:
-            btn = make_playlist_button(song, self.play_song)
-            inner.add_widget(btn)
-
-        self.add_widget(layout)
-
-    def play_song(self, instance):
-        player.current_playlist = self.songs
-        play_music(instance.text)
-
-class GhostScreen(Screen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        self.songs = list(GHOST_SONGS.keys())
-
-        layout, inner = make_scrollable_content(" Ghost", self, songs=self.songs)
-
-        for song in self.songs:
-            btn = make_playlist_button(song, self.play_song)
-            inner.add_widget(btn)
-
-        self.add_widget(layout)
-
-    def play_song(self, instance):
-        player.current_playlist = self.songs
-        play_music(instance.text)
-
-class JPScreen(Screen):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-        self.songs = list(JP_SONGS.keys())
-
-        layout, inner = make_scrollable_content(" Judas Priest", self, songs=self.songs)
-
-        for song in self.songs:
-            btn = make_playlist_button(song, self.play_song)
-            inner.add_widget(btn)
-
-        self.add_widget(layout)
-
-    def play_song(self, instance):
-        player.current_playlist = self.songs
-        play_music(instance.text)
-
+#main application
 class MyApp(App):
     def build(self):
         root = FloatLayout(size=(dp(360), dp(640)))
@@ -1122,10 +1092,10 @@ class MyApp(App):
         sm = ScreenManager(size_hint=(1, 1))
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(PlaylistScreen(name="playlist"))
-        sm.add_widget(AtcScreen(name="against"))
-        sm.add_widget(GhostScreen(name="ghost"))
-        sm.add_widget(JPScreen(name="jp"))
-        sm.add_widget(RandomScreen(name="random"))
+        sm.add_widget(PlaylistDetailScreen(name="against", title="Against the Current", songs=list(ATC_SONGS.keys())))
+        sm.add_widget(PlaylistDetailScreen(name="ghost", title="Ghost", songs=list(GHOST_SONGS.keys())))
+        sm.add_widget(PlaylistDetailScreen(name="jp", title="Judas Priest", songs=list(JP_SONGS.keys())))
+        sm.add_widget(PlaylistDetailScreen(name="random", title="Random", songs=list(RANDOM_SONGS.keys())))
         sm.add_widget(SettingsScreen(name="settings"))
 
         player.song_bar = SongBar()
