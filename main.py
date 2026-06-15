@@ -29,7 +29,9 @@ def resource_path(path):
     return os.path.join(base_path, *path.split('/'))
 
 
-Window.size = (360, 640)
+from kivy.utils import platform
+if platform not in ('android', 'ios'):
+    Window.size = (360, 640)
 
 #initialisation of pygame on user device
 USE_PYGAME = False
@@ -666,8 +668,7 @@ def switch_screen(screen, screen_name):
 def make_header(text):
     lbl = Label(
         text=text,
-        size_hint=(1, None),
-        height=dp(50),
+        size_hint=(1, 0.0781),
         pos_hint={'x': 0, 'top': 1},
         color=(1, 1, 1, 1),
         halign="left",
@@ -701,7 +702,7 @@ def make_header(text):
 
 #creates the navigation bar for each screen
 def make_nav_bar(screen, layout):
-    nav_bg = Label(size_hint=(1, None), height=dp(50), pos_hint={'x': 0, 'y': 0})
+    nav_bg = Label(size_hint=(1, 0.0781), pos_hint={'x': 0, 'y': 0})
     with nav_bg.canvas.before:
         Color(0.07, 0.07, 0.07, 1)
         nav_bg.rect = Rectangle(pos=nav_bg.pos, size=nav_bg.size)
@@ -718,24 +719,21 @@ def make_nav_bar(screen, layout):
 
     btn_home = Button(
         background_normal=resource_path("home_logo.png"),
-        size_hint=(None, None),
-        size=(dp(50), dp(50)),
+        size_hint=(0.1388, 0.0781),
         pos_hint={'x': 0, 'y': 0}
     )
     btn_home.bind(on_press=lambda inst: switch_screen(screen, 'home'))
 
     btn_playlist = Button(
         background_normal=resource_path("playlist_logo.png"),
-        size_hint=(None, None),
-        size=(dp(50), dp(50)),
+        size_hint=(0.1388, 0.0781),
         pos_hint={'x': 0.1527, 'y': 0}
     )
     btn_playlist.bind(on_press=lambda inst: switch_screen(screen, 'playlist'))
 
     btn_settings = Button(
         background_normal=resource_path("settings_logo.png"),
-        size_hint=(None, None),
-        size=(dp(50), dp(50)),
+        size_hint=(0.1388, 0.0781),
         pos_hint={'x': 0.3056, 'y': 0}
     )
     btn_settings.bind(on_press=lambda inst: switch_screen(screen, 'settings'))
@@ -753,8 +751,7 @@ def make_scrollable_content(header_text, screen, songs=None):
     # Add playlist play/shuffle buttons in the header area if songs are provided
     if songs is not None:
         btn_play = Button(
-            size_hint=(None, None),
-            size=(dp(35), dp(35)),
+            size_hint=(0.0972, 0.0546),
             pos_hint={'right': 0.9, 'top': 1},
             background_normal=resource_path("playlist_play_logo.png"),
             background_down=resource_path("playlist_play_logo.png"),
@@ -764,8 +761,7 @@ def make_scrollable_content(header_text, screen, songs=None):
         layout.add_widget(btn_play)
 
         btn_shuffle = Button(
-            size_hint=(None, None),
-            size=(dp(35), dp(35)),
+            size_hint=(0.0972, 0.0546),
             pos_hint={'right': 0.98, 'top': 1},
             background_normal=resource_path("playlist_shuffle_logo.png"),
             background_down=resource_path("playlist_shuffle_logo.png"),
@@ -869,7 +865,7 @@ class HomeScreen(Screen):
         self.results_scroll.add_widget(self.results_box)
 
         # Bottom navigation buttons
-        self.nav_bg = Label(size_hint=(1, None), height=dp(50), pos_hint={'x': 0, 'y': 0})
+        self.nav_bg = Label(size_hint=(1, 0.0781), pos_hint={'x': 0, 'y': 0})
         with self.nav_bg.canvas.before:
             Color(0.07, 0.07, 0.07, 1)
             self.nav_bg.rect = Rectangle(pos=self.nav_bg.pos, size=self.nav_bg.size)
@@ -884,32 +880,28 @@ class HomeScreen(Screen):
         self.nav_bg.bind(pos=update_home_nav, size=update_home_nav)
 
         btn1 = Button(
-            size_hint=(None, None),
+            size_hint=(0.1388, 0.0781),
             background_normal=resource_path("home_logo.png"),
-            size=(dp(50), dp(50)),
             pos_hint={'x': 0, 'y': 0}
         )
 
         btn2 = Button(
             background_normal=resource_path("playlist_logo.png"),
-            size_hint=(None, None),
-            size=(dp(50), dp(50)),
+            size_hint=(0.1388, 0.0781),
             pos_hint={'x': 0.1527, 'y': 0}
         )
         btn2.bind(on_press=lambda inst: switch_screen(self, "playlist"))
 
         btn3 = Button(
             background_normal=resource_path("settings_logo.png"),
-            size_hint=(None, None),
-            size=(dp(50), dp(50)),
+            size_hint=(0.1388, 0.0781),
             pos_hint={'x': 0.3056, 'y': 0}
         )
         btn3.bind(on_press=lambda inst: switch_screen(self, "settings"))
 
         # Search Header
         self.header_layout = FloatLayout(
-            size_hint=(1, None),
-            height=dp(50),
+            size_hint=(1, 0.0781),
             pos_hint={'x': 0, 'top': 1}
         )
 
@@ -934,8 +926,7 @@ class HomeScreen(Screen):
 
         # Search logo button/icon
         self.search_icon = Button(
-            size_hint=(None, None),
-            size=(dp(30), dp(30)),
+            size_hint=(0.0833, 0.0468),
             pos_hint={'x': 0.028, 'top': 1},
             background_normal=resource_path("search_logo.png"),
             background_down=resource_path("search_logo.png"),
@@ -947,8 +938,7 @@ class HomeScreen(Screen):
         self.search_input = TextInput(
             hint_text="Search songs...",
             multiline=False,
-            size_hint=(0.82, None),
-            height=dp(36),
+            size_hint=(0.82, 0.0562),
             pos_hint={'x': 0.14, 'top': 1},
             background_color=(0.15, 0.15, 0.15, 1),
             foreground_color=(1, 1, 1, 1),
