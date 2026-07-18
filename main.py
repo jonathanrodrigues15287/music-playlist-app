@@ -17,6 +17,10 @@ import random
 import logging
 import os
 import sys
+from oscpy.client import OSCClient
+from oscpy.server import OSCThreadServer
+import json
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -33,62 +37,20 @@ from kivy.utils import platform
 if platform not in ('android', 'ios'):
     Window.size = (360, 640)
 
-#initialisation of pygame on user device
-USE_PYGAME = False
-try:
-    import pygame
-    if not pygame.mixer.get_init():
-        pygame.mixer.init()
-    USE_PYGAME = True
-except ImportError:
-    USE_PYGAME = False
 
-class PygameSoundWrapper:
-    def __init__(self, path):
-        self.path = path
-        try:
-            snd = pygame.mixer.Sound(path)
-            self.length = snd.get_length()
-        except Exception:
-            self.length = 0.0
-        pygame.mixer.music.load(path)
-        self._volume = 1.0
+CLIENT_PORT = 3001
+SERVER_PORT = 3000
 
-    def play(self):
-        pygame.mixer.music.play()
+osc = OSCThreadServer()
+osc.listen(address='127.0.0.1', port=CLIENT_PORT, default=True)
+client = OSCClient('127.0.0.1', SERVER_PORT)
 
-    def stop(self):
-        pygame.mixer.music.stop()
-
-    def seek(self, pos):
-        pygame.mixer.music.play(start=pos)
-        if player.is_paused:
-            pygame.mixer.music.pause()
-
-    def get_pos(self):
-        return 0.0
-
-    @property
-    def volume(self):
-        return self._volume
-
-    @volume.setter
-    def volume(self, val):
-        self._volume = val
-        pygame.mixer.music.set_volume(val)
-
-    @property
-    def state(self):
-        if pygame.mixer.music.get_busy():
-            return 'play'
-        return 'stop'
-
-#global state object
 class PlayerState:
     def __init__(self):
-        self.sound = None
+        self.sound = None  # Not used directly anymore
         self.song_name = ""
         self.is_paused = False
+        self.is_playing = False
         self.volume = 1.0
         self.paused_pos = 0.0
         self.song_bar = None
@@ -96,8 +58,29 @@ class PlayerState:
         self.accumulated_time = 0.0
         self.current_playlist = []
         self.is_search_looping = False
+        
+        # New for OSC
+        self.current_pos = 0.0
+        self.length = 0.0
 
-player = PlayerState() 
+player = PlayerState()
+
+@osc.address(b'/status')
+def on_status(status_json):
+    status = json.loads(status_json.decode('utf-8'))
+    player.is_paused = status.get('is_paused', False)
+    player.is_playing = status.get('is_playing', False)
+    player.current_pos = status.get('pos', 0.0)
+    player.length = status.get('length', 0.0)
+    
+    # If the service reports it's playing a different song (e.g. auto next)
+    # we could update the UI here.
+    song_name = status.get('song_name', "")
+    if song_name and player.song_name != song_name:
+        player.song_name = song_name
+        if player.song_bar:
+            player.song_bar.on_new_song(song_name)
+
 
 #random songs playlist
 RANDOM_SONGS = {
@@ -255,82 +238,21 @@ SONGS = {**RANDOM_SONGS, **JP_SONGS, **ATC_SONGS, **GHOST_SONGS}
 
 
 #bridge between app and android media controls
+# Handled by service.py now. We just provide dummy methods to avoid errors.
 class AndroidMediaSession:
     def __init__(self):
         self.session = None
-        self._PlaybackStateCompat = None
-        self._MediaMetadataCompat = None
-        self._setup()
-
-    def _setup(self):
-        try:
-            from jnius import autoclass
-
-            PythonActivity      = autoclass('org.kivy.android.PythonActivity')
-            MediaSessionCompat  = autoclass('androidx.media.session.MediaSessionCompat')
-            PlaybackStateCompat = autoclass('androidx.media.session.PlaybackStateCompat')
-            MediaMetadataCompat = autoclass('androidx.media.MediaMetadataCompat')
-
-            self._PlaybackStateCompat = PlaybackStateCompat
-            self._MediaMetadataCompat = MediaMetadataCompat
-
-            activity = PythonActivity.mActivity
-            context  = activity.getApplicationContext()
-
-            self.session = MediaSessionCompat(context, "KivyMusicPlayer")
-
-            actions = (
-                PlaybackStateCompat.ACTION_PLAY |
-                PlaybackStateCompat.ACTION_PAUSE |
-                PlaybackStateCompat.ACTION_STOP |
-                PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-            )
-
-            state = (PlaybackStateCompat.Builder()
-                     .setActions(actions)
-                     .setState(PlaybackStateCompat.STATE_STOPPED, 0, 1.0)
-                     .build())
-
-            self.session.setPlaybackState(state)
-            self.session.setActive(True)
-
-            logging.info("MediaSession initialised successfully")
-
-        except Exception as e:
-            logging.warning(f"MediaSession not available (non-Android): {e}")
-            self.session = None
 
     def update_metadata(self, title, artist):
-        if not self.session:
-            return
-        try:
-            metadata = (self._MediaMetadataCompat.Builder()
-                        .putString(self._MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                        .putString(self._MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-                        .build())
-            self.session.setMetadata(metadata)
-        except Exception as e:
-            logging.error(f"MediaSession metadata error: {e}")
+        pass
 
     def set_playing(self, is_playing):
-        if not self.session:
-            return
-        try:
-            state_val = (self._PlaybackStateCompat.STATE_PLAYING
-                         if is_playing
-                         else self._PlaybackStateCompat.STATE_PAUSED)
-            state = (self._PlaybackStateCompat.Builder()
-                     .setState(state_val, 0, 1.0)
-                     .build())
-            self.session.setPlaybackState(state)
-        except Exception as e:
-            logging.error(f"MediaSession state error: {e}")
+        pass
 
     def release(self):
-        if self.session:
-            self.session.setActive(False)
-            self.session.release()
+        pass
+
+media_session = AndroidMediaSession()
 
 media_session = AndroidMediaSession()
 
@@ -440,13 +362,10 @@ class SongBar(FloatLayout):
         return super().on_touch_up(touch)
 
     def _update_drag(self, touch):
-        if not player.sound:
-            return
-        
         local_x = touch.x - self.x
         ratio = max(0.0, min(1.0, local_x / self.width))
         
-        duration = player.sound.length
+        duration = player.length
         if not duration or duration <= 0:
             return
             
@@ -458,56 +377,28 @@ class SongBar(FloatLayout):
         self._fill.size = (self.size[0] * ratio, self.PROG_H)
 
     def _apply_seek(self):
-        if not player.sound:
-            return
-            
         target_pos = self._drag_pos
-        
-        if USE_PYGAME:
-            player.sound.seek(target_pos)
-        else:
-            if player.is_paused:
-                player.paused_pos = target_pos
-            else:
-                player.sound.seek(target_pos)
-                
-        player.play_start_time = time.time()
-        player.accumulated_time = target_pos
-        if player.is_paused:
-            player.paused_pos = target_pos
+        client.send_message(b'/seek', [float(target_pos)])
 
     def _refresh_progress(self):
         if self._dragging:
             return
 
-        if player.is_paused:
-            position = player.paused_pos
-        elif player.sound:
-            pos = player.sound.get_pos()
-            if pos > 0:
-                position = pos
-            else:
-                position = player.accumulated_time + (time.time() - player.play_start_time)
-        else:
-            position = 0.0
+        position = player.current_pos
+        duration = player.length
 
-        duration = player.sound.length if player.sound else 0
         if duration and duration > 0:
             position = min(position, duration)
             ratio = max(0.0, min(1.0, position / duration))
         else:
             ratio = 0.0
 
-        if player.sound and player.sound.state == 'stop' and not player.is_paused and (time.time() - player.play_start_time > 0.5):
-            if not play_next_song():
-                player.is_paused = False
-                player.paused_pos = 0.0
-                player.accumulated_time = 0.0
-                position = 0.0
-                ratio = 0.0
-                self.play_btn.background_normal = resource_path("play_logo.png")
-                self.play_btn.background_down   = resource_path("play_logo.png")
-                media_session.set_playing(False)
+        if player.is_paused or not player.is_playing:
+            self.play_btn.background_normal = resource_path("play_logo.png")
+            self.play_btn.background_down   = resource_path("play_logo.png")
+        else:
+            self.play_btn.background_normal = resource_path("pause_logo.png")
+            self.play_btn.background_down   = resource_path("pause_logo.png")
 
         x, y = self.pos
         bar_y = y + self.BAR_H - self.PROG_H
@@ -517,47 +408,17 @@ class SongBar(FloatLayout):
         self._fill.size  = (self.size[0] * ratio, self.PROG_H)
 
     def _toggle_pause(self, instance):
-        if player.sound is None:
-            return
-
         if player.is_paused:
-            pos_to_seek = player.paused_pos
-            if USE_PYGAME:
-                pygame.mixer.music.unpause()
-            else:
-                player.sound.play()
-                Clock.schedule_once(lambda dt: player.sound.seek(pos_to_seek), 0.3)
-            player.is_paused = False
-            player.play_start_time = time.time()
-            player.accumulated_time = pos_to_seek
-            self.play_btn.background_normal = resource_path("pause_logo.png")
-            self.play_btn.background_down   = resource_path("pause_logo.png")
-            media_session.set_playing(True)
-        else:
-            pos = player.sound.get_pos()
-            if pos <= 0:
-                pos = player.accumulated_time + (time.time() - player.play_start_time)
-            player.paused_pos = min(pos, player.sound.length if player.sound.length else pos)
-            if USE_PYGAME:
-                pygame.mixer.music.pause()
-            else:
-                player.sound.stop()
-            player.is_paused = True
-            self.play_btn.background_normal = resource_path("play_logo.png")
-            self.play_btn.background_down   = resource_path("play_logo.png")
-            media_session.set_playing(False)
+            client.send_message(b'/unpause', [])
+        elif player.is_playing:
+            client.send_message(b'/pause', [])
 
     def on_new_song(self, song_name):
-        player.is_paused  = False
-        player.paused_pos = 0.0
-        player.accumulated_time = 0.0
-        self.play_btn.background_normal = resource_path("pause_logo.png")
-        self.play_btn.background_down   = resource_path("pause_logo.png")
-
         title = song_name.split("\n")[0].strip()
         self.title_label.text = title
-
         self._refresh_progress()
+
+from db import increment_play_count, get_top_songs
 
 #plays song after selection
 def play_music(song_name, from_search=False):
@@ -572,41 +433,27 @@ def play_music(song_name, from_search=False):
             logging.warning(f"No song file mapped for: {song_name}")
             return
 
-    if player.sound:
-        player.sound.stop()
-        player.sound = None
-
-    player.is_paused  = False
-    player.paused_pos = 0.0
-    player.accumulated_time = 0.0
-
-    song_path     = SONGS[song_name]
+    song_path = SONGS[song_name]
     song_path = resource_path(song_path)
-    if USE_PYGAME:
-        player.sound = PygameSoundWrapper(song_path)
-    else:
-        player.sound = SoundLoader.load(song_path)
-
-    if player.sound is None:
-        logging.error(f"Could not load file: {song_path}")
-        return
-
-    player.song_name    = song_name
-    player.sound.volume = player.volume
-    player.sound.play()
-    player.play_start_time = time.time()
 
     parts  = song_name.split("\n")
     title  = parts[0].strip()
     artist = parts[1].strip().lstrip("-").strip() if len(parts) > 1 else "Unknown"
-
-    media_session.update_metadata(title, artist)
-    media_session.set_playing(True)
+    
+    player.song_name = song_name
+    
+    # Increment play count in SQL DB
+    play_count = increment_play_count(song_name)
+    
+    # Create rich playlist for autonomous background playback
+    playlist_data = [{"name": s, "path": resource_path(SONGS[s])} for s in player.current_playlist if s in SONGS]
+    playlist_json = json.dumps(playlist_data)
+    client.send_message(b'/play', [song_path.encode('utf-8'), song_name.encode('utf-8'), title.encode('utf-8'), artist.encode('utf-8'), playlist_json.encode('utf-8')])
 
     if player.song_bar:
         player.song_bar.on_new_song(song_name)
-
-    logging.info(f"Now playing: {title} — {artist}")
+    
+    logging.info(f"Requested play: {title} — {artist} (Play count: {play_count})")
 
 
 #plays next song in current playlist
@@ -1031,8 +878,7 @@ class SettingsScreen(Screen):
 
     def change_volume(self, instance, value):
         player.volume = value
-        if player.sound:
-            player.sound.volume = value
+        client.send_message(b'/volume', [float(value)])
         percent = int(value * 100)
         self.volume_label.text = f"Volume: {percent}%"
 
@@ -1045,6 +891,7 @@ class PlaylistScreen(Screen):
         layout, inner = make_scrollable_content("  Playlists", self)
 
         playlists = [
+            ("Top", "top"),
             ("Against The Current", "against"),
             ("Ghost", "ghost"),
             ("Judas Priest", "jp"),
@@ -1064,6 +911,25 @@ class PlaylistScreen(Screen):
 
 
 
+class TopPlaylistScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.current_songs = []
+        self.layout, self.inner = make_scrollable_content("  Top 25", self, songs=self.current_songs)
+        self.add_widget(self.layout)
+
+    def on_pre_enter(self, *args):
+        self.inner.clear_widgets()
+        songs = get_top_songs(25)
+        self.current_songs.clear()
+        self.current_songs.extend(songs)
+        for song in self.current_songs:
+            btn = make_playlist_button(song, self.play_song)
+            self.inner.add_widget(btn)
+
+    def play_song(self, instance):
+        player.current_playlist = self.current_songs
+        play_music(instance.text)
 
 class PlaylistDetailScreen(Screen):
     def __init__(self, title, songs, **kwargs):
@@ -1090,6 +956,7 @@ class MyApp(App):
         sm = ScreenManager(size_hint=(1, 1))
         sm.add_widget(HomeScreen(name="home"))
         sm.add_widget(PlaylistScreen(name="playlist"))
+        sm.add_widget(TopPlaylistScreen(name="top"))
         sm.add_widget(PlaylistDetailScreen(name="against", title="Against the Current", songs=list(ATC_SONGS.keys())))
         sm.add_widget(PlaylistDetailScreen(name="ghost", title="Ghost", songs=list(GHOST_SONGS.keys())))
         sm.add_widget(PlaylistDetailScreen(name="jp", title="Judas Priest", songs=list(JP_SONGS.keys())))
@@ -1103,13 +970,25 @@ class MyApp(App):
 
         return root
 
+    def on_start(self):
+        if platform == 'android':
+            try:
+                from jnius import autoclass
+                mActivity = autoclass('org.kivy.android.PythonActivity').mActivity
+                service = autoclass('org.example.proj_music.ServiceMediaservice')
+                service.start(mActivity, '')
+                logging.info("Successfully started background MediaService")
+            except Exception as e:
+                logging.error(f"Failed to start service: {e}")
+                
+        # Send sync request to get current status in case service was already running
+        client.send_message(b'/sync', [])
+
     def on_pause(self):
         return True
 
     def on_stop(self):
-        if player.sound:
-            player.sound.stop()
-        media_session.release()
+        pass
 
 
 MyApp().run()
