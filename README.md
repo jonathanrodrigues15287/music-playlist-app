@@ -11,6 +11,10 @@ A mobile music player built with Python and Kivy, targeting Android. Features ar
   - Judas Priest
   - Random Mix
 
+- **Search and Top Songs**
+  - Search for songs directly from the Home screen
+  - Tracks play counts via SQLite to dynamically manage song popularity
+
 - **Playlist play & shuffle**
   - Play playlists in order
   - Shuffle directly from the playlist header
@@ -28,17 +32,11 @@ A mobile music player built with Python and Kivy, targeting Android. Features ar
 - **Volume control**
   - Real-time volume slider in the Settings screen
 
-- **Pause & resume with seek**
-  - Saves playback position when paused
-  - Resumes from the saved timestamp
-
-- **Android Media Session integration**
+- **Android Media Session & Background Service**
+  - True background playback on Android via a dedicated Python service (`service.py`)
+  - Inter-Process Communication (IPC) between UI and Service via OSC protocol
   - Lock screen metadata support
   - Android system media controls via `androidx.media`
-
-- **Dual audio backend**
-  - Uses `pygame.mixer` when available for better seek support
-  - Automatically falls back to Kivy `SoundLoader`
 
 - **Screen navigation**
   - Home screen
@@ -53,6 +51,7 @@ A mobile music player built with Python and Kivy, targeting Android. Features ar
 - Python 3.x
 - Kivy  
 - Pygame
+- oscpy (for IPC)
 For Android builds: Buildozer with androidx.media in dependencies
 MP3 files placed in a songs/ directory alongside main.py
 
@@ -61,6 +60,8 @@ MP3 files placed in a songs/ directory alongside main.py
 ```text
 project/
 ├── main.py
+├── service.py              # Background audio service (Android)
+├── db.py                   # SQLite database operations
 ├── songs/                  # MP3 files (not included)
 │   ├── its_my_life.mp3
 │   └── ...
